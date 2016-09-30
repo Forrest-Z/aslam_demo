@@ -5,7 +5,7 @@
 #include <aslam_demo/factors/key_generator.h>
 //#include <gtsam_ros/gtsam_ros.h>
 
-namespace bnr_factors {
+namespace factors {
 
 /* ************************************************************************* */
 KeyGenerator::KeyGenerator(double time_delta) {
@@ -86,5 +86,5 @@ std::string _bnrRawKeyFormatter(gtsam::Key key) {
 }
 
 /* ************************************************************************* */
-} /// @namespace bnr_factors
+} /// @namespace factors
 

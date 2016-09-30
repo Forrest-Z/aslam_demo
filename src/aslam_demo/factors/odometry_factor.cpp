@@ -8,7 +8,7 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/geometry/Pose2.h>
 
-namespace bnr_factors {
+namespace factors {
 
 /**
  * A class for an odometry constraint. This is basically identical the the standard GTSAM
@@ -76,7 +76,7 @@ private:
   }
 };
 
-} // namespace bnr_factors
+} // namespace factors
 
 #endif // ODOMETRY_FACTOR_H__
 

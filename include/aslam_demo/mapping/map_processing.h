@@ -16,16 +16,17 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
 #include <aslam_demo/mapping/probability_map.h>
+#include <aslam_demo/mapping/mapping_common.h>
+
 #include <nav_msgs/OccupancyGrid.h>
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/geometry/Pose3.h>
 #include <string>
 
-namespace bnr_mapping {
+namespace mapping {
 
 namespace map {
 
-typedef std::map<ros::Time, sensor_msgs::LaserScan> LaserScans;
 /**
  * Create an empty map large enough for all of the poses plus the specified buffer.
  * Depending on the included poses, the map may not actually span the origin.
@@ -129,7 +130,7 @@ bool insideMap(const nav_msgs::OccupancyGrid& map, double x, double y);
 
 } /// @namespace map
 
-} /// @namespace bnr_mapping
+} /// @namespace mapping
 
 #endif // MAP_PROCESSING_H
 

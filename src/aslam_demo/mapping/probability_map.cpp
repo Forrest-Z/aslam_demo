@@ -8,7 +8,7 @@
 #include <fstream>
 #include <exception>
 
-namespace bnr_mapping {
+namespace mapping {
 
 const double ProbabilityMap::MAX_LOG_ODDS = 50.0;
 
@@ -421,5 +421,5 @@ double ProbabilityMap::ProbabilityToLogOdds(double probability) {
 }
 
 /* ************************************************************************* */
-} // namespace bnr_mapping
+} // namespace mapping
 

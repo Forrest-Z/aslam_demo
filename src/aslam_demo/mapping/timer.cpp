@@ -1,7 +1,7 @@
 
 #include <aslam_demo/mapping/timer.h>
 
-namespace bnr_mapping {
+namespace mapping {
 
 /* ************************************************************************* */
 Timer::Timer() : elapsed_(0.0) {
@@ -36,5 +36,5 @@ double Timer::elapsed() const {
 }
 
 /* ************************************************************************* */
-} // namespace: bnr_mapping
+} // namespace: mapping
 

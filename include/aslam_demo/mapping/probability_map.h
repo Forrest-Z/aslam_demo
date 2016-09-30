@@ -9,7 +9,7 @@
 #include <gtsam/base/Matrix.h>
 #include <boost/shared_ptr.hpp>
 
-namespace bnr_mapping {
+namespace mapping {
 
 /**
  * A class for maintaining a floating-point occupancy grid. ROS currently supports
@@ -351,7 +351,7 @@ Derived1 ProbabilityMap::conv2d(const Eigen::MatrixBase<Derived1>& input, const 
   return output/normalization;
 }
 
-} // namespace bnr_mapping
+} // namespace mapping
 
 #endif // PROBABILITY_MAP_H
 

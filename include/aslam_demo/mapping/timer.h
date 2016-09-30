@@ -9,7 +9,7 @@
 #include <boost/timer.hpp>
 #endif
 
-namespace bnr_mapping {
+namespace mapping {
 
 /**
  * A class that wraps a Boost Timer to assist code profiling. This class uses the new v2 Boost Timers, when available.
@@ -34,7 +34,7 @@ double elapsed_;
 
 };
 
-} // namespace: bnr_mapping
+} // namespace: mapping
 
 #endif // TIMER_H
 

@@ -14,7 +14,7 @@
 #include <boost/foreach.hpp>
 #include <boost/filesystem.hpp>
 
-namespace bnr_mapping {
+namespace mapping {
 
 namespace map {
 
@@ -27,7 +27,7 @@ ProbabilityMap createEmptyMap(const gtsam::Values& values, double map_cell_size,
 
   // Create a key generator for timestamp <--> key conversions
   // For this purpose, the time tolerance doesn't matter
-  bnr_factors::KeyGenerator key_generator(1.0);
+  factors::KeyGenerator key_generator(1.0);
 
   // Loop through all of the values, extracting the bounding box
   double x_min = +std::numeric_limits<double>::max();
@@ -36,7 +36,7 @@ ProbabilityMap createEmptyMap(const gtsam::Values& values, double map_cell_size,
   double y_max = -std::numeric_limits<double>::max();
   BOOST_FOREACH(const gtsam::Values::ConstKeyValuePair& key_value, values) {
     // Only check Pose2 values
-    if( key_generator.extractKeyType(key_value.key) == bnr_factors::key_type::Pose2) {
+    if( key_generator.extractKeyType(key_value.key) == factors::key_type::Pose2) {
       // Extract the pose
       gtsam::Pose2 pose = static_cast<const gtsam::Pose2&>(key_value.value);
       // Update the bounding box
@@ -78,16 +78,16 @@ void buildMap(ProbabilityMap& map, const gtsam::Values& values, const LaserScans
   sensor_models::LaserScanModel laser_model(scan_sigma, false);
 
   // Create a key generator for timestamp <--> key conversions
-  bnr_factors::KeyGenerator key_generator(time_tolerance);
+  factors::KeyGenerator key_generator(time_tolerance);
 
   // Loop through the optimized poses
   size_t counter = 0;
   BOOST_FOREACH(const gtsam::Values::ConstKeyValuePair& key_value, values) {
     // Extract the key type and timestamp
-    bnr_factors::key_type::Enum key_type = key_generator.extractKeyType(key_value.key);
+    factors::key_type::Enum key_type = key_generator.extractKeyType(key_value.key);
     ros::Time timestamp = key_generator.extractTimestamp(key_value.key);
     // Only use Pose2 values
-    if( key_type == bnr_factors::key_type::Pose2) {
+    if( key_type == factors::key_type::Pose2) {
 
       // Find the laserscan closest to the pose timestamp
       LaserScans::const_iterator scans_begin = scans.lower_bound(timestamp - ros::Duration(time_tolerance));
@@ -294,5 +294,5 @@ bool insideMap(const nav_msgs::OccupancyGrid& map, double x, double y) {
 /* ************************************************************************* */
 } /// @namespace map
 
-} /// @namespace bnr_mapping
+} /// @namespace mapping
 

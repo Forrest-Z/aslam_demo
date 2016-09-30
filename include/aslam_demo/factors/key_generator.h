@@ -8,7 +8,7 @@
 #include <gtsam/nonlinear/Key.h>
 #include <ros/ros.h>
 
-namespace bnr_factors {
+namespace factors {
 
 /**
  * Enum defining known variable types and their corresponding character key
@@ -100,7 +100,7 @@ static const gtsam::KeyFormatter BnrTimestampKeyFormatter = &_bnrTimestampKeyFor
 ///
 static const gtsam::KeyFormatter BnrRawKeyFormatter = &_bnrRawKeyFormatter;
 
-} // namespace bnr_factors
+} // namespace factors
 
 #endif // KEY_GENERATOR_H_
 

@@ -8,7 +8,7 @@
 #include <iostream>
 #include <exception>
 
-namespace bnr_mapping {
+namespace mapping {
 
 namespace sensor_models {
 
@@ -439,4 +439,4 @@ void LaserScanModel::updateMap(ProbabilityMap& map, const sensor_msgs::LaserScan
 } // namespace sensor_models
 
 /* ************************************************************************* */
-} // namespace bnr_mapping
+} // namespace mapping

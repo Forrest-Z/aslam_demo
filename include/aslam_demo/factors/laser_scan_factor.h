@@ -8,7 +8,7 @@
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/geometry/Pose2.h>
 
-namespace bnr_factors {
+namespace factors {
 
 /**
  * A class for a laser scan constraint produced by the Canonical Scan Matcher (ICP). This
@@ -76,7 +76,7 @@ private:
   }
 };
 
-} // namespace bnr_factors
+} // namespace factors
 
 #endif // LASER_SCAN_FACTOR_H__
 

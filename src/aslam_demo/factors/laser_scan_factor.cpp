@@ -5,7 +5,7 @@
 #include <aslam_demo/factors/laser_scan_factor.h>
 #include <gtsam_ros/gtsam_ros.h>
 
-namespace bnr_factors {
+namespace factors {
 
 /* ************************************************************************* */
 LaserScanFactor::LaserScanFactor(gtsam::Key key1, gtsam::Key key2, const gtsam::Pose2& measurement, const gtsam::noiseModel::Base::shared_ptr& model)
@@ -33,5 +33,5 @@ std::ostream& operator<<(std::ostream& stream, const LaserScanFactor& factor) {
 
 /* ************************************************************************* */
 }
- // namespace bnr_factors
+ // namespace factors
 

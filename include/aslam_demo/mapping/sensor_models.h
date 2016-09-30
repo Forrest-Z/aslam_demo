@@ -11,7 +11,7 @@
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/geometry/Point2.h>
 
-namespace bnr_mapping {
+namespace mapping {
 
 namespace sensor_models {
 
@@ -59,7 +59,7 @@ protected:
 
 } // namespace sensor_models
 
-} // namespace bnr_mapping
+} // namespace mapping
 
 #endif // SENSOR_MODELS_H
 
