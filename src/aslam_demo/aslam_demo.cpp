@@ -97,9 +97,12 @@ void AslamDemo::slam() {
 		return;
 	}
 	pose_estimates_ = mapping::optimization::optimizeFactorGraph(factor_graph_,initial_guess_,parameters_);
-	pose_with_cov_ = mapping::optimization::computeCovariances(factor_graph_,pose_estimates_);
+	if (pose_estimates_.size() < 100) {
+		return;
+	}
+	//pose_with_cov_ = mapping::optimization::computeCovariances(factor_graph_,pose_estimates_);
 	mapping::map::buildMap(prob_map_,pose_estimates_,laserscans_,base_T_laser_,.001,1.e-09,"");
-	prob_map_.occupancyGrid("CurrentMap");
+	prob_map_.occupancyGrid("../currmap");
 	ROS_INFO_STREAM("Map Formed!!");
 
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);
