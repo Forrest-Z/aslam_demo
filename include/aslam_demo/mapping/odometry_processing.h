@@ -31,7 +31,7 @@ namespace odometry {
  * @param time_tolerance
  * @return A collection of relative pose information
  */
-//RelativePoseEstimates computeRelativePoses(const Odometry& odometry, const Timestamps& timestamps, const gtsam::Vector& sigmas, double time_tolerance, double scale = 1.0);
+RelativePoseEstimates computeRelativePoses(const Odometry& odometry, const Timestamps& timestamps, const gtsam::Vector& sigmas, double time_tolerance, double scale = 1.0);
 
 /**
  * Compute relative poses between the previous message time and the target time, and between the target time and next message time
@@ -49,7 +49,7 @@ gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav
  * @param time_tolerance
  * @return A GTSAM factor graph of odometry factors
  */
-//gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance);
+gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance);
 
 } /// @namespace odometry
 

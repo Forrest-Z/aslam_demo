@@ -71,9 +71,11 @@ private:
 	ros::Subscriber  laser_sub_;
 
     mapping::LaserScans laserscans_;
-    std::map<ros::Time,nav_msgs::Odometry> odomreadings_;
+    mapping::Odometry odomreadings_;
     mapping::RelativePoseEstimates laser_poses_;
     factors::KeyGenerator key_generator_;
+
+    double time_tolerance = 1.e-07;
 
     gtsam::NonlinearFactorGraph factor_graph_;
     gtsam::Values initial_guess_,pose_estimates_; //@todo:initial_guess
@@ -85,6 +87,7 @@ private:
     nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
     void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
     void createZeroInitialGuess();
+    void connectWithOdometry(gtsam::NonlinearFactorGraph&);
 
 public:
 	AslamDemo(ros::NodeHandle);

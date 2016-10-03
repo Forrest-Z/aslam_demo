@@ -94,7 +94,7 @@ namespace odometry {
 }
 */
 /* ************************************************************************* */
-/*RelativePoseEstimates computeRelativePoses(const Odometry& odometry, const Timestamps& timestamps, const gtsam::Vector& sigmas, double time_tolerance, double scale) {
+RelativePoseEstimates computeRelativePoses(const Odometry& odometry, const Timestamps& timestamps, const gtsam::Vector& sigmas, double time_tolerance, double scale) {
   RelativePoseEstimates relative_poses;
 
   Timer timer;
@@ -187,7 +187,7 @@ namespace odometry {
 
   return relative_poses;
 }
-/*
+
 /* ************************************************************************* */
 gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav_msgs::Odometry& next_message, const ros::Time& timestamp1, const ros::Time& timestamp2) {
   gtsam::Pose2 relative_pose;
@@ -217,7 +217,7 @@ gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav
 }
 
 /* ************************************************************************* */
-/*gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance) {
+gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance) {
   gtsam::NonlinearFactorGraph factors;
 
   Timer timer;
@@ -249,7 +249,7 @@ gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav
 
   return factors;
 }
-*/
+
 /* ************************************************************************* */
 } /// @namespace odometry
 

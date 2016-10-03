@@ -2,7 +2,7 @@
 
 namespace aslam_demo {
 
-AslamDemo::AslamDemo(ros::NodeHandle n):n_(n) {
+AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerator(AslamDemo::time_tolerance)) {
 	laser_sub_ = n_.subscribe<sensor_msgs::LaserScan>("/scan",1000,boost::bind(&AslamDemo::scanCallback,this,_1));
 	odometry_sub_ = n_.subscribe<nav_msgs::Odometry>("/odom",1000,boost::bind(&AslamDemo::odomCallback,this,_1));
 	tf::StampedTransform stamped_transform;
@@ -17,7 +17,7 @@ AslamDemo::AslamDemo(ros::NodeHandle n):n_(n) {
 	      ROS_ERROR("%s",ex.what());
 	      ros::Duration(1.0).sleep();
     }
-
+	transform.setIdentity();
 	//map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("curr_map",1);
 	pose_pub_ = n_.advertise<geometry_msgs::Pose2D>("curr_pose",1);
 	command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
@@ -84,25 +84,73 @@ void AslamDemo::createZeroInitialGuess() {
 	}
 }
 
+/*gtsam::Pose2 applyTransformation(gtsam::Pose2& pose,gtsam::Pose2& dpose) {
+	gtsam::Matrix M;
+	M(0,0) = dpose.
+	gtsam::Pose2
+}*/
+
+
+void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph) {
+    ROS_INFO_STREAM("Connect with odom entered");
+
+	gtsam::KeySet keys = factor_graph.keys();
+	mapping::Timestamps timestamps;
+	gtsam::Vector sigmas(6);
+
+	sigmas<<0.01,0.01,0.01,0.01,0.01,0.01;
+
+	for (auto const iter: keys) {
+		timestamps.insert(key_generator_.extractTimestamp(iter));
+	}
+
+	mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,1.e-09);
+	gtsam::NonlinearFactorGraph odom_graph = mapping::odometry::createOdometryFactors(relative_estimates,1.e-03);
+
+	gtsam::Pose2 curr_pose = gtsam::Pose2(0.0,0.0,0.0);
+	initial_guess_.insert(*(keys.begin()),curr_pose);
+	auto ptr = keys.begin();
+	for (auto const iter: relative_estimates) {
+		curr_pose.compose(iter.relative_pose);
+		auto next_ptr = std::next(ptr,1);
+		initial_guess_.insert(*next_ptr,curr_pose);
+		ptr = next_ptr;
+	}
+
+    ROS_INFO_STREAM("Before adding odom factors \t"<<factor_graph.size());
+	factor_graph.push_back(odom_graph);
+    ROS_INFO_STREAM("After adding odom factors \t"<<factor_graph.size());
+
+}
+
 void AslamDemo::slam() {
-	if (laser_poses_.empty())
+	if (laser_poses_.empty() || laser_poses_.size()<100)
 	{
 		return;
 	}
-	factor_graph_ = mapping::laserscan::createLaserScanFactors(laser_poses_,1.e-09);
-	createZeroInitialGuess();
+	factor_graph_ = mapping::laserscan::createLaserScanFactors(laser_poses_,time_tolerance);
+	connectWithOdometry(factor_graph_);
+	initial_guess_.print();
+//	createZeroInitialGuess();
 
 	if(!mapping::optimization::validateFactorGraph(factor_graph_,initial_guess_)) {
 		ROS_INFO_STREAM("Not Validated!!");
 		return;
 	}
+	ROS_INFO_STREAM("Validated!!");
 	pose_estimates_ = mapping::optimization::optimizeFactorGraph(factor_graph_,initial_guess_,parameters_);
+	pose_estimates_.print();
 	if (pose_estimates_.size() < 100) {
 		return;
 	}
 	//pose_with_cov_ = mapping::optimization::computeCovariances(factor_graph_,pose_estimates_);
-	mapping::map::buildMap(prob_map_,pose_estimates_,laserscans_,base_T_laser_,.001,1.e-09,"");
-	prob_map_.occupancyGrid("../currmap");
+	mapping::map::buildMap(prob_map_,pose_estimates_,laserscans_,base_T_laser_,.001,time_tolerance,"map");
+	std::string filename = "currmap";
+	prob_map_.occupancyGrid(filename);
+	tf::Transform transform;
+	transform.setIdentity();
+	tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base_link","map" ));
+
 	ROS_INFO_STREAM("Map Formed!!");
 
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);

@@ -378,7 +378,15 @@ void ProbabilityMap::occupancyGrid(const std::string& filename) const {
 
   // Convert to occupancy values
   gtsam::Matrix occupancy = occupancyGrid();
+//  boost::filesystem::path dir(filename);
 
+/*  if(!(boost::filesystem::exists(dir))) {
+	  std::cout<<"Doesn't Exists"<<std::endl;
+
+      if (boost::filesystem::create_directory(dir))) {
+    	  std::cout << "....Successfully Created !" << std::endl;
+      }
+  }*/
   // Open the PGM image file
   std::ofstream image((filename + ".pgm").c_str(), std::ios::binary);
 

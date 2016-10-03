@@ -66,7 +66,6 @@ RelativePoseEstimate computeLaserScanMatch(
   csm_params.use_ml_weights = false; // Use the computed alpha angle to weight the correspondences. Must compute the angle for this to work.
   csm_params.use_sigma_weights = false; // Use the "readings_sigma" field to weight the correspondences. If false, no weight is used. If all the weights are the same, this is identical to not weighting them.
   csm_params.debug_verify_tricks = false; // Do not run the debug check
-  ROS_INFO_STREAM("r1");
 
   // Set the laser transformation (and determine if it is inverted)
   double roll = base_T_laser.rotation().roll();
@@ -75,7 +74,6 @@ RelativePoseEstimate computeLaserScanMatch(
   csm_params.laser[0] = base_T_laser.x();
   csm_params.laser[1] = base_T_laser.y();
   csm_params.laser[2] = base_T_laser.rotation().yaw();
-  ROS_INFO_STREAM("r2");
   // Transform the initial pose into laserscan coordinates
   gtsam::Pose2 first_guess;
   {
@@ -86,7 +84,6 @@ RelativePoseEstimate computeLaserScanMatch(
     gtsam::Pose3 delta = map_T_laser1.between(map_T_laser2);
     first_guess = gtsam::Pose2(delta.translation().x(), delta.translation().y(), delta.rotation().yaw());
   }
-  ROS_INFO_STREAM("r3");
 
   // Convert the ROS laserscan messages into CSM laser structures (Note: This allocates memory)
   /// @todo: Do I need the 'laser_inverted' flag since I'm doing the above 3D operations?
@@ -111,17 +108,14 @@ RelativePoseEstimate computeLaserScanMatch(
   if(!csm_filename.empty()) {
     writeCsmLog(csm_params.laser_ref, csm_params.laser_sens, csm_filename);
   }
-  ROS_INFO_STREAM("r4");
   ROS_INFO_STREAM(csm_params.laser_ref->estimate[0]);
   // Use CSM to do the scan matching
   sm_result output;
   sm_icp(&csm_params, &output);
-  ROS_INFO_STREAM("r5");
 
   // Release allocated memory
   ld_free(csm_params.laser_ref);
   ld_free(csm_params.laser_sens);
-  ROS_INFO_STREAM("r6");
 
   // Check if the match was successful
   if(!output.valid) {
@@ -138,7 +132,6 @@ RelativePoseEstimate computeLaserScanMatch(
     gtsam::Pose3 delta = map_T_base1.between(map_T_base2);
     relative_pose = gtsam::Pose2(delta.translation().x(), delta.translation().y(), delta.rotation().yaw());
   }
-  ROS_INFO_STREAM("r1");
 
   // Create the output object
   RelativePoseEstimate match;
@@ -151,7 +144,6 @@ RelativePoseEstimate computeLaserScanMatch(
       match.cov(m,n) = gsl_matrix_get(output.cov_x_m, m, n);
     }
   }
-  ROS_INFO_STREAM("r1");
 
   // Release additional allocated memory
   gsl_matrix_free(output.cov_x_m);
