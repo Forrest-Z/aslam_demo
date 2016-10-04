@@ -41,6 +41,9 @@
 
 #include <thread>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
+
 
 #ifndef ASLAM_DEMO
 #define ASLAM_DEMO
@@ -75,7 +78,8 @@ private:
     mapping::RelativePoseEstimates laser_poses_;
     factors::KeyGenerator key_generator_;
 
-    double time_tolerance = 1.e-07;
+    double time_tolerance = 0.1;
+    bool map_initialized_ = false;
 
     gtsam::NonlinearFactorGraph factor_graph_;
     gtsam::Values initial_guess_,pose_estimates_; //@todo:initial_guess
@@ -86,19 +90,29 @@ private:
     nav_msgs::Odometry getCorrespondingOdom(const ros::Time &);
     nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
     void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
+    void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
+
     void createZeroInitialGuess();
     void connectWithOdometry(gtsam::NonlinearFactorGraph&);
+    gtsam::Pose2 extractLatestPose(const gtsam::Values&);
 
 public:
 	AslamDemo(ros::NodeHandle);
+	~AslamDemo();
 	std::atomic<bool> isactive_laser_factor_thread_,isactive_slam_thread_,isactive_navigation_thread_;
 
 	void scanCallback (const sensor_msgs::LaserScan::ConstPtr&);
 	void odomCallback (const nav_msgs::Odometry::ConstPtr&);
+	void slam();
+
 
 	void createLaserFactors();
-	void slam();
+	void slamHandler();
 	void navigationHandler();
+
+	std::mutex slam_mutex;
+	std::condition_variable slam_cv;
+
 
 	std::thread laser_factor_thread_;
 	std::thread slam_thread_;

@@ -86,26 +86,38 @@ void buildMap(ProbabilityMap& map, const gtsam::Values& values, const LaserScans
     // Extract the key type and timestamp
     factors::key_type::Enum key_type = key_generator.extractKeyType(key_value.key);
     ros::Time timestamp = key_generator.extractTimestamp(key_value.key);
+    ROS_INFO_STREAM("Am here"<<timestamp);
+
     // Only use Pose2 values
     if( key_type == factors::key_type::Pose2) {
 
       // Find the laserscan closest to the pose timestamp
       LaserScans::const_iterator scans_begin = scans.lower_bound(timestamp - ros::Duration(time_tolerance));
       LaserScans::const_iterator scans_end   = scans.upper_bound(timestamp + ros::Duration(time_tolerance));
+      ROS_INFO_STREAM("Am here 1"<<scans.lower_bound(timestamp - ros::Duration(time_tolerance))->first<<"\t"<<scans.upper_bound(timestamp + ros::Duration(time_tolerance))->first);
+      ROS_INFO_STREAM("WW"<<timestamp - ros::Duration(time_tolerance)<<"\t"<<timestamp + ros::Duration(time_tolerance));
+      ROS_INFO_STREAM("TT"<<scans.begin()->first<<"\t"<<std::next(scans.begin(),1)->first<<"\t"<<std::next(scans.begin(),2)->first<<"\t"<<std::next(scans.begin(),3)->first<<"\t"<<std::next(scans.begin(),4)->first);
       const sensor_msgs::LaserScan* scan = 0;
       double min_delta = std::numeric_limits<double>::max();
       for(LaserScans::const_iterator scans_iter = scans_begin; scans_iter != scans_end; ++scans_iter) {
+        ROS_INFO_STREAM("Am here 2");
+
         double delta = std::fabs( (scans_iter->first - timestamp).toSec() );
         if(delta < min_delta) {
           min_delta = delta;
           scan = &(scans_iter->second);
         }
       }
-
+      ROS_INFO_STREAM("Am here 3"<<*scan);
       // If a scan was found, add it to the map
       if(scan) {
+          ROS_INFO_STREAM("Am here 4");
+          key_value.value.print();
+
         // Look up the optimized pose
         gtsam::Pose2 world_T_base = static_cast<const gtsam::Pose2&>(key_value.value);
+
+        world_T_base.print("World_T_base: ");
         // Update the map use the laser scan model
         laser_model.updateMap(map, *scan, world_T_base, base_T_laser);
       }

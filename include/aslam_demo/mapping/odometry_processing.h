@@ -49,7 +49,7 @@ gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav
  * @param time_tolerance
  * @return A GTSAM factor graph of odometry factors
  */
-gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance);
+gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance,gtsam::KeySet keys);
 
 } /// @namespace odometry
 

@@ -108,7 +108,6 @@ RelativePoseEstimate computeLaserScanMatch(
   if(!csm_filename.empty()) {
     writeCsmLog(csm_params.laser_ref, csm_params.laser_sens, csm_filename);
   }
-  ROS_INFO_STREAM(csm_params.laser_ref->estimate[0]);
   // Use CSM to do the scan matching
   sm_result output;
   sm_icp(&csm_params, &output);
@@ -149,7 +148,6 @@ RelativePoseEstimate computeLaserScanMatch(
   gsl_matrix_free(output.cov_x_m);
   gsl_matrix_free(output.dx_dy1_m);
   gsl_matrix_free(output.dx_dy2_m);
-  ROS_INFO_STREAM("r1");
 
   // Add some error detection
   double initial_guess_error = initial_pose.localCoordinates(match.relative_pose).norm();

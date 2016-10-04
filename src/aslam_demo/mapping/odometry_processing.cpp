@@ -217,7 +217,7 @@ gtsam::Pose2 splitOdometry(const nav_msgs::Odometry& previous_message, const nav
 }
 
 /* ************************************************************************* */
-gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance) {
+gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& relative_poses, double time_tolerance,gtsam::KeySet keys) {
   gtsam::NonlinearFactorGraph factors;
 
   Timer timer;
@@ -237,8 +237,11 @@ gtsam::NonlinearFactorGraph createOdometryFactors(const RelativePoseEstimates& r
     gtsam::noiseModel::Base::shared_ptr noise_model = gtsam::noiseModel::Gaussian::Covariance(relative_poses[i].cov, true);
 
     // (2) Create a factor from the relative pose and cov
-    gtsam::Key key1 = key_generator.generateKey(factors::key_type::Pose2, relative_poses[i].timestamp1);
-    gtsam::Key key2 = key_generator.generateKey(factors::key_type::Pose2, relative_poses[i].timestamp2);
+  //  gtsam::Key key1 = key_generator.generateKey(factors::key_type::Pose2, relative_poses[i].timestamp1);
+  //  gtsam::Key key2 = key_generator.generateKey(factors::key_type::Pose2, relative_poses[i].timestamp2);
+    gtsam::Key key1 = *std::next(keys.begin(),i);
+    gtsam::Key key2 = *std::next(keys.begin(),i+1);
+
     gtsam::NonlinearFactor::shared_ptr factor(new factors::OdometryFactor(key1, key2, relative_poses[i].relative_pose, noise_model));
     factors.push_back(factor);
   }
