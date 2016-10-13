@@ -8,6 +8,7 @@
 #include <geometry_msgs/Pose2D.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/GetMap.h>
 
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
@@ -36,6 +37,13 @@
 #include <gtsam/geometry/Point3.h>
 
 #include <gtsam_ros/gtsam_ros.h>
+#include <gazebo_msgs/ModelState.h>
+#include <gazebo_msgs/ModelStates.h>
+
+#include <gazebo_msgs/GetModelState.h>
+#include <gazebo_msgs/GetModelStateRequest.h>
+#include <gazebo_msgs/GetModelStateResponse.h>
+
 
 #include <laser_geometry/laser_geometry.h>
 
@@ -64,6 +72,7 @@ private:
 	nav_msgs::OccupancyGrid current_map_;
     mapping::ProbabilityMap prob_map_;
     gtsam::Pose3 base_T_laser_;
+    gtsam::Pose2 current_pose_;
 
 
 	ros::Publisher map_pub_;
@@ -72,13 +81,26 @@ private:
 
 	ros::Subscriber odometry_sub_;
 	ros::Subscriber  laser_sub_;
+	ros::Subscriber  gazebo_model_state_sub_;
+
+	ros::ServiceClient model_state_client_;
+	std::map<ros::Time,gazebo_msgs::ModelStates> model_state_list_;
+
+
+	ros::ServiceClient map_service_client_;
+	nav_msgs::GetMap srv_map_;
+	gazebo_msgs::GetModelState model_state_srv_;
 
     mapping::LaserScans laserscans_;
     mapping::Odometry odomreadings_;
+    mapping::Odometry trueodomreadings_;
+
     mapping::RelativePoseEstimates laser_poses_;
+    mapping::RelativePoseEstimates laser_pose_cache_;
+
     factors::KeyGenerator key_generator_;
 
-    double time_tolerance = 0.1;
+    double time_tolerance = 0.0001;
     bool map_initialized_ = false;
 
     gtsam::NonlinearFactorGraph factor_graph_;
@@ -93,7 +115,7 @@ private:
     void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
 
     void createZeroInitialGuess();
-    void connectWithOdometry(gtsam::NonlinearFactorGraph&);
+    void connectWithOdometry(gtsam::NonlinearFactorGraph&,gtsam::Values&);
     gtsam::Pose2 extractLatestPose(const gtsam::Values&);
 
 public:
@@ -104,7 +126,8 @@ public:
 	void scanCallback (const sensor_msgs::LaserScan::ConstPtr&);
 	void odomCallback (const nav_msgs::Odometry::ConstPtr&);
 	void slam();
-
+	void getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &res);
+	void gazeboModelStateCallback(const gazebo_msgs::ModelStates::ConstPtr&);
 
 	void createLaserFactors();
 	void slamHandler();

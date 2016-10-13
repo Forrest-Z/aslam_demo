@@ -373,10 +373,42 @@ gtsam::Matrix ProbabilityMap::occupancyGrid() const {
   return occupancy;
 }
 
+void ProbabilityMap::occupancyGrid(nav_msgs::OccupancyGrid& occupancy_msg) {
+
+	std::cout<<"Occ Entered"<<std::endl;
+	gtsam::Matrix occupancy = occupancyGrid();
+
+	occupancy_msg.header.frame_id = "map";
+	occupancy_msg.header.stamp = ros::Time::now();
+	occupancy_msg.header.seq = 1;
+	std::cout<<"Header Done"<<std::endl;
+
+
+
+	occupancy_msg.info.height = rows();
+	occupancy_msg.info.width = cols();
+	occupancy_msg.info.resolution = cell_size_;
+	occupancy_msg.info.origin.position.x = origin_.x();
+	occupancy_msg.info.origin.position.y = origin_.y();
+	occupancy_msg.info.origin.position.z =  0.0;
+	std::cout<<"Info Done"<<std::endl;
+
+	occupancy_msg.data.resize(rows()*cols());
+	int index = 0;
+	for(size_t row = 0; row < rows(); ++row) {
+	    for(size_t col = 0; col < cols(); ++col) {
+	      occupancy_msg.data[index++] = occupancy(row,col);
+	    }
+	}
+
+}
+
+
 /* ************************************************************************* */
 void ProbabilityMap::occupancyGrid(const std::string& filename) const {
 
   // Convert to occupancy values
+
   gtsam::Matrix occupancy = occupancyGrid();
 //  boost::filesystem::path dir(filename);
 
@@ -402,6 +434,8 @@ void ProbabilityMap::occupancyGrid(const std::string& filename) const {
     }
   }
   image.close();
+
+
 
   // Open the YAML config file
   std::ofstream yaml((filename + ".yaml").c_str());

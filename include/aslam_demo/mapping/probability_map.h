@@ -8,6 +8,10 @@
 #include <gtsam/geometry/Point2.h>
 #include <gtsam/base/Matrix.h>
 #include <boost/shared_ptr.hpp>
+#include <nav_msgs/OccupancyGrid.h>
+#include <ros/ros.h>
+#include <ros/rostime_decl.h>
+
 
 namespace mapping {
 
@@ -258,6 +262,9 @@ public:
    * format is supported. A YAML map description file is also produced.
    */
   void occupancyGrid(const std::string& filename) const;
+
+  void occupancyGrid(nav_msgs::OccupancyGrid& occupancy_msg) ;
+
 
   /**
    * Blur/smooth the map values
