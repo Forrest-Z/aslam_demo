@@ -129,7 +129,7 @@ void buildMap(ProbabilityMap& map, const gtsam::Values& values, const LaserScans
     // Periodically save an intermediate map
     size_t delta = std::floor(values.size() / 10);
     if(counter % delta == 0) {
-      map.occupancyGrid(debug_path + "/map-" + boost::lexical_cast<std::string>(timestamp.toSec()));
+//    map.occupancyGrid(debug_path + "/map-" + boost::lexical_cast<std::string>(timestamp.toSec()));
     }
 
     // Print a progress message

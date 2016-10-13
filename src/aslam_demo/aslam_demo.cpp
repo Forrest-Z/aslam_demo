@@ -41,8 +41,17 @@ void AslamDemo::getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap
 }
 
 void AslamDemo::gazeboModelStateCallback(const gazebo_msgs::ModelStates::ConstPtr& input) {
-	ROS_INFO_STREAM("Called");
-	model_state_list_[ros::Time::now()] = *input;
+	for(size_t i = 0;i < input->name.size();i++) {
+		if(input->name[i] == "mobile_base") {
+		nav_msgs::Odometry odom_temp;
+		odom_temp.header.frame_id = "base_footprint";
+		odom_temp.header.stamp = ros::Time::now();
+		odom_temp.pose.pose = input->pose[i];
+		odom_temp.pose.pose.position.z = 0.0;
+		odom_temp.twist.twist = input->twist[i];
+		trueodomreadings_[ros::Time::now()] = odom_temp;
+	}
+	}
 }
 
 
@@ -56,8 +65,8 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 	struct sm_params csm_params;
 
     //Enter the transform form base_link to laser_link
-    nav_msgs::Odometry odom1 = getCorrespondingOdom(latest_scan.header.stamp);
-    nav_msgs::Odometry odom2 = getCorrespondingOdom(scan_ptr->header.stamp);
+    nav_msgs::Odometry odom1 = getCorrespondingOdom(latest_scan.header.stamp,odomreadings_);
+    nav_msgs::Odometry odom2 = getCorrespondingOdom(scan_ptr->header.stamp,odomreadings_);
 
     gtsam::Pose2 initial_pose = getRelativeOdom(odom1,odom2);
     if (std::isnan(initial_pose.x()) || std::isnan(initial_pose.x()) || std::isnan(initial_pose.x())) {
@@ -79,7 +88,7 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
   //  	return;
     }
 
-    if (laser_pose_cache_.size()%50 == 0) {
+    if (laser_pose_cache_.size()%200 == 0) {
     	slam();
     }
 
@@ -109,8 +118,8 @@ void AslamDemo::odomCallback(const nav_msgs::Odometry::ConstPtr& odom_ptr) {
 	}
 	odomreadings_[odom.header.stamp] = odom;
 
-	if(!model_state_list_.empty()) {
-		ROS_INFO_STREAM("Odom Stream:"<<odom.pose.pose.position<<"\t"<<model_state_list_.rbegin()->second.pose.position);
+	if(!trueodomreadings_.empty()) {
+//ROS_INFO_STREAM("Odom Stream:"<<odom.pose.pose.position<<"\t"<<getCorrespondingOdom(odom.header.stamp,trueodomreadings_).pose.pose.position);
 	}
 
 }
@@ -131,7 +140,7 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 	mapping::Timestamps timestamps;
 	gtsam::Vector sigmas(6);
 
-	sigmas<<0.01,0.01,0.01,0.01,0.01,0.01;
+	sigmas<<0.1,0.1,0.1,0.1,0.1,0.1;
 	for (auto const iter: keys) {
 //		ROS_INFO_STREAM("Keys:"<<iter);
 		timestamps.insert(key_generator_.extractTimestamp(iter));
@@ -152,9 +161,7 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 		ptr = std::next(ptr,1);
 		initial_guess.insert(*ptr,curr_pose);
 	}
-
 	factor_graph.push_back(odom_graph);
-
 }
 gtsam::Pose2 AslamDemo::extractLatestPose(const gtsam::Values& values) {
 	return(values.at<gtsam::Pose2>(*(values.keys().rbegin())));
@@ -166,6 +173,23 @@ void AslamDemo::fromGtsamPose2toTf(const gtsam::Pose2 &pose2, tf::Transform &tra
 	rotation.setRPY(0.0,0.0,pose2.theta());
 	transform.setOrigin(translation);
 	transform.setBasis(rotation);
+}
+
+void AslamDemo::getTrueEstimates(gtsam::Values& input_estimates,gtsam::Values& true_estimates) {
+	for(auto const iter: input_estimates) {
+		ros::Time timestamp = key_generator_.extractTimestamp(iter.key);
+		nav_msgs::Odometry corresponding_odom = getCorrespondingOdom(timestamp,trueodomreadings_);
+		tf::Quaternion q(corresponding_odom.pose.pose.orientation.x,corresponding_odom.pose.pose.orientation.y,corresponding_odom.pose.pose.orientation.z,corresponding_odom.pose.pose.orientation.w);
+		double roll,pitch,yaw;
+		FromQuaternionToRPY(q,roll,pitch,yaw);
+		gtsam::Pose2 pose = gtsam::Pose2(corresponding_odom.pose.pose.position.x,corresponding_odom.pose.pose.position.y,yaw);
+		true_estimates.insert(iter.key,pose);
+	}
+}
+
+void AslamDemo::FromQuaternionToRPY(tf::Quaternion& q,double& roll,double& pitch, double& yaw) {
+	 tf::Matrix3x3 m(q);
+     m.getRPY(roll, pitch, yaw);
 }
 
 void AslamDemo::slam() {
@@ -185,7 +209,9 @@ void AslamDemo::slam() {
 	}
 //	pose_estimates_ = mapping::optimization::optimizeFactorGraph(factor_graph_,initial_guess_,parameters_);
 	pose_estimates = mapping::optimization::optimizeFactorGraph(factor_graph,initial_guess,parameters_);
-
+//	gtsam::Values true_estimates;
+//	getTrueEstimates(pose_estimates,true_estimates);
+//	pose_estimates = true_estimates;
 	current_pose_ = extractLatestPose(pose_estimates);
 	current_pose_.print("Current Pose: ");
 
@@ -198,12 +224,11 @@ void AslamDemo::slam() {
 //	pose_estimates_.print("Pose Estimates");
 //	prob_map_.clear();
 	if (!map_initialized_) {
-			prob_map_ = mapping::map::createEmptyMap(pose_estimates,.02,10);
+			prob_map_ = mapping::map::createEmptyMap(pose_estimates,.02,15);
 			map_initialized_ = true;
 	}
-//	pose_estimates.print("Pose Estimates");
-//	mapping::map::buildMap(prob_map_,pose_estimates_,laserscans_,base_T_laser_,.001,time_tolerance,"map");
-	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.001,time_tolerance,"map");
+
+	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,"map");
 
 	ROS_INFO_STREAM("Map Initialized");
 	ROS_INFO_STREAM("Map Formed!!");
@@ -233,11 +258,11 @@ gtsam::Pose2 AslamDemo::getRelativeOdom(nav_msgs::Odometry &odom1,nav_msgs::Odom
 	return pose;
 }
 
-nav_msgs::Odometry AslamDemo::getCorrespondingOdom(const ros::Time &time_stamp) {
+nav_msgs::Odometry AslamDemo::getCorrespondingOdom(const ros::Time &time_stamp,mapping::Odometry& odomreadings) {
 	nav_msgs::Odometry odom;
-	while(odomreadings_.empty());
-	auto iter = odomreadings_.upper_bound(time_stamp);
-	if (iter != odomreadings_.end()) {
+	while(odomreadings.empty());
+	auto iter = odomreadings.upper_bound(time_stamp);
+	if (iter != odomreadings.end()) {
 		odom = iter->second;
 	}
 	else {

@@ -52,13 +52,19 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <kdtree++/kdtree.hpp>
 
 #ifndef ASLAM_DEMO
 #define ASLAM_DEMO
 
 namespace aslam_demo
 {
+
+
+
 class AslamDemo {
+
+
 private:
 	ros::NodeHandle n_;
 
@@ -84,7 +90,7 @@ private:
 	ros::Subscriber  gazebo_model_state_sub_;
 
 	ros::ServiceClient model_state_client_;
-	std::map<ros::Time,gazebo_msgs::ModelStates> model_state_list_;
+	std::map<ros::Time,gazebo_msgs::ModelState> model_state_list_;
 
 
 	ros::ServiceClient map_service_client_;
@@ -109,7 +115,7 @@ private:
     gtsam::LevenbergMarquardtParams parameters_; //@todo:parameters
 
     gtsam::Pose2 getRelativeOdom(nav_msgs::Odometry &,nav_msgs::Odometry &);
-    nav_msgs::Odometry getCorrespondingOdom(const ros::Time &);
+    nav_msgs::Odometry getCorrespondingOdom(const ros::Time &,mapping::Odometry&);
     nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
     void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
     void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
@@ -117,6 +123,9 @@ private:
     void createZeroInitialGuess();
     void connectWithOdometry(gtsam::NonlinearFactorGraph&,gtsam::Values&);
     gtsam::Pose2 extractLatestPose(const gtsam::Values&);
+
+    void getTrueEstimates(gtsam::Values& ,gtsam::Values& );
+    void FromQuaternionToRPY(tf::Quaternion& ,double& ,double&, double&);
 
 public:
 	AslamDemo(ros::NodeHandle);
