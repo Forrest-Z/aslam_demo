@@ -63,9 +63,50 @@ namespace aslam_demo
 
 
 class AslamDemo {
-
-
 private:
+
+	struct poseNode {
+	  typedef double value_type;
+
+	  poseNode(value_type a, value_type b, value_type c,gtsam::Key key) {
+	    d[0] = a;
+	    d[1] = b;
+	    d[2] = c;
+	    key_ = key;
+
+	  }
+
+	  poseNode(const poseNode & x) {
+	    d[0] = x.d[0];
+	    d[1] = x.d[1];
+	    d[2] = x.d[2];
+	    key_ = x.key_;
+	  }
+
+	  ~poseNode() {
+
+	  }
+
+	  double distance_to(poseNode const& x) const {
+	     double dist = 0;
+	     for (int i = 0; i != 3; ++i)
+	        dist += (d[i]-x.d[i])*(d[i]-x.d[i]);
+	     return std::sqrt(dist);
+	  }
+
+	  inline value_type operator[](size_t const N) const { return d[N]; }
+
+	  value_type d[3];
+	  gtsam::Key key_;
+
+	};
+
+	inline double tac( poseNode t, size_t k ) { return t[k]; }
+	typedef KDTree::KDTree<3, poseNode, std::pointer_to_binary_function<poseNode,size_t,double> > tree_type;
+    tree_type pose_tree_;
+    void updateKDTree(const gtsam::Values& );
+
+
 	ros::NodeHandle n_;
 
 	laser_geometry::LaserProjection laser_projection_;

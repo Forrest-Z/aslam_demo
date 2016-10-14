@@ -175,6 +175,16 @@ void AslamDemo::fromGtsamPose2toTf(const gtsam::Pose2 &pose2, tf::Transform &tra
 	transform.setBasis(rotation);
 }
 
+void AslamDemo::updateKDTree(const gtsam::Values& values) {
+	for(auto const iter: values) {
+		gtsam::Pose2 pose = iter.value;
+		poseNode node(pose.x(),pose.y(),pose.theta(),iter.key);
+		pose_tree_.insert(node);
+	}
+
+}
+
+
 void AslamDemo::getTrueEstimates(gtsam::Values& input_estimates,gtsam::Values& true_estimates) {
 	for(auto const iter: input_estimates) {
 		ros::Time timestamp = key_generator_.extractTimestamp(iter.key);
