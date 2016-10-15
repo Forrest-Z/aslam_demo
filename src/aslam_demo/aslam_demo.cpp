@@ -6,6 +6,8 @@ AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerat
 	laser_sub_ = n_.subscribe<sensor_msgs::LaserScan>("/scan",1000000,boost::bind(&AslamDemo::scanCallback,this,_1));
 	odometry_sub_ = n_.subscribe<nav_msgs::Odometry>("/odom",1000,boost::bind(&AslamDemo::odomCallback,this,_1));
 	gazebo_model_state_sub_ = n_.subscribe<gazebo_msgs::ModelStates>("/gazebo/model_states",1000,boost::bind(&AslamDemo::gazeboModelStateCallback,this,_1));
+///	f = std::bind(&AslamDemo::tac, this, _1, _2);
+ 	pose_tree_ = tree_type(std::ptr_fun(tac));
 	ROS_INFO_STREAM("A");
 	tf::StampedTransform stamped_transform;
 	tf::Transform transform;
@@ -16,9 +18,9 @@ AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerat
 		fromTftoGtsamPose(base_T_laser_,transform);
 	}
 	catch (tf::TransformException &ex) {
-	      ROS_ERROR("%s",ex.what());
-	      ros::Duration(1.0).sleep();
-    }
+	  ROS_ERROR("%s",ex.what());
+	  ros::Duration(1.0).sleep();
+  }
 	ROS_INFO_STREAM("B");
 
 	current_pose_ = gtsam::Pose2(0.0,0.0,0.0);
@@ -28,33 +30,62 @@ AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerat
 	command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
 	ROS_INFO_STREAM("C");
 
-    map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
-    model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
+  map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
+  model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
 	ROS_INFO_STREAM("D");
 
    // slam_thread_ = std::thread(&AslamDemo::slamHandler,this);
-
 }
 
 void AslamDemo::getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &res) {
 
 }
 
+
+
+
 void AslamDemo::gazeboModelStateCallback(const gazebo_msgs::ModelStates::ConstPtr& input) {
 	for(size_t i = 0;i < input->name.size();i++) {
 		if(input->name[i] == "mobile_base") {
-		nav_msgs::Odometry odom_temp;
-		odom_temp.header.frame_id = "base_footprint";
-		odom_temp.header.stamp = ros::Time::now();
-		odom_temp.pose.pose = input->pose[i];
-		odom_temp.pose.pose.position.z = 0.0;
-		odom_temp.twist.twist = input->twist[i];
-		trueodomreadings_[ros::Time::now()] = odom_temp;
-	}
+		  nav_msgs::Odometry odom_temp;
+		  odom_temp.header.frame_id = "base_footprint";
+		  odom_temp.header.stamp = ros::Time::now();
+		  odom_temp.pose.pose = input->pose[i];
+		  odom_temp.pose.pose.position.z = 0.0;
+		  odom_temp.twist.twist = input->twist[i];
+		  trueodomreadings_[ros::Time::now()] = odom_temp;
+		}
 	}
 }
 
 
+void AslamDemo::doScanMatch(sensor_msgs::LaserScan& latest_scan,sensor_msgs::LaserScan& current_scan,mapping::RelativePoseEstimates& relative_poses) {
+  struct sm_params csm_params;
+
+      //Enter the transform form base_link to laser_link
+  nav_msgs::Odometry odom1 = getCorrespondingOdom(latest_scan.header.stamp,odomreadings_);
+  nav_msgs::Odometry odom2 = getCorrespondingOdom(current_scan.header.stamp,odomreadings_);
+
+  gtsam::Pose2 initial_pose = getRelativeOdom(odom1,odom2);
+  if (std::isnan(initial_pose.x()) || std::isnan(initial_pose.x()) || std::isnan(initial_pose.x())) {
+    initial_pose =  gtsam::Pose2(0.0,0.0,0.0);
+  }
+  mapping::RelativePoseEstimate laser_pose;
+  try {
+    laser_pose = mapping::csm::computeLaserScanMatch(latest_scan,
+        current_scan,
+    csm_params,
+    initial_pose,base_T_laser_,.1,100000000000000,1000000000000000,"../");
+    laser_pose.relative_pose.print("Laser Scan Match:");
+     // laser_poses_.push_back(laser_pose);
+    relative_poses.push_back(laser_pose);
+  }
+  catch(std::exception &ex) {
+    ROS_ERROR("%s",ex.what());
+    return;
+  }
+
+}
 
 void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 	if (laserscans_.empty()) {
@@ -62,38 +93,13 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 		return;
 	}
 	sensor_msgs::LaserScan latest_scan = laserscans_.rbegin()->second;
-	struct sm_params csm_params;
-
-    //Enter the transform form base_link to laser_link
-    nav_msgs::Odometry odom1 = getCorrespondingOdom(latest_scan.header.stamp,odomreadings_);
-    nav_msgs::Odometry odom2 = getCorrespondingOdom(scan_ptr->header.stamp,odomreadings_);
-
-    gtsam::Pose2 initial_pose = getRelativeOdom(odom1,odom2);
-    if (std::isnan(initial_pose.x()) || std::isnan(initial_pose.x()) || std::isnan(initial_pose.x())) {
-    	initial_pose =  gtsam::Pose2(0.0,0.0,0.0);
-    }
-    mapping::RelativePoseEstimate laser_pose;
-    try {
-    	laser_pose = mapping::csm::computeLaserScanMatch(latest_scan,
-    		*scan_ptr,
-			csm_params,
-			initial_pose,base_T_laser_,.05,100000000000000,1000000000000000,"../");
-    	laser_pose.relative_pose.print("Laser Scan Match:");
-       // laser_poses_.push_back(laser_pose);
-    	laser_pose_cache_.push_back(laser_pose);
-
-    }
-    catch(std::exception &ex) {
-    	ROS_ERROR("%s",ex.what());
-  //  	return;
-    }
+	sensor_msgs::LaserScan current_scan = *scan_ptr;
+	doScanMatch(latest_scan,current_scan,laser_pose_cache_);
 
     if (laser_pose_cache_.size()%200 == 0) {
     	slam();
     }
-
 	laserscans_[scan_ptr->header.stamp] = *scan_ptr;
-
 }
 
 
@@ -109,8 +115,6 @@ void AslamDemo::slamHandler() {
 }
 
 void AslamDemo::odomCallback(const nav_msgs::Odometry::ConstPtr& odom_ptr) {
-	//ROS_INFO_STREAM("odom Called");
-
 	nav_msgs::Odometry odom = *odom_ptr;
 	if (odomreadings_.empty()) {
 		odomreadings_[odom.header.stamp] = odom;
@@ -134,19 +138,38 @@ void AslamDemo::createZeroInitialGuess() {
 
 
 void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gtsam::Values& initial_guess) {
-    ROS_INFO_STREAM("Connect with odom entered");
 
+  ROS_INFO_STREAM("Connect with odom entered");
 	gtsam::KeySet keys = factor_graph.keys();
 	mapping::Timestamps timestamps;
 	gtsam::Vector sigmas(6);
-
+	double time_threshold = 5.0;
+	ros::Time curr_time,prev_time;
+	ros::Duration delta_time;
+	gtsam::KeySet keys_copy(keys);
 	sigmas<<0.1,0.1,0.1,0.1,0.1,0.1;
-	for (auto const iter: keys) {
+	for (auto const iter: keys_copy) {
 //		ROS_INFO_STREAM("Keys:"<<iter);
-		timestamps.insert(key_generator_.extractTimestamp(iter));
-//		initial_guess_.insert(iter,gtsam::Pose2(0.0,0.0,0.0));
+	  curr_time = key_generator_.extractTimestamp(iter);
+	  if(*(keys_copy.begin()) != iter) {
+	    delta_time = curr_time - prev_time;
+	    ros::Time new_time = prev_time;
 
+	    if(delta_time.toSec() > time_threshold) {
+	      while(new_time < curr_time) {
+	        ROS_INFO_STREAM("New Time"<<new_time<<"Delta_time"<<delta_time.toSec());
+          new_time += ros::Duration(1.0);
+          gtsam::Key new_key = key_generator_.generateKey(factors::key_type::Pose2,new_time);
+          keys.insert(new_key);
+          timestamps.insert(new_time);
+	      }
+	    }
+	  }
+		timestamps.insert(curr_time);
+		prev_time = curr_time;
+//		initial_guess_.insert(iter,gtsam::Pose2(0.0,0.0,0.0));
 	}
+	if(!timestamps.size()) return;
 
 	mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,time_tolerance);
 	gtsam::NonlinearFactorGraph odom_graph = mapping::odometry::createOdometryFactors(relative_estimates,time_tolerance,keys);
@@ -177,13 +200,92 @@ void AslamDemo::fromGtsamPose2toTf(const gtsam::Pose2 &pose2, tf::Transform &tra
 
 void AslamDemo::updateKDTree(const gtsam::Values& values) {
 	for(auto const iter: values) {
-		gtsam::Pose2 pose = iter.value;
+		gtsam::Pose2 pose = values.at<gtsam::Pose2>(iter.key);
 		poseNode node(pose.x(),pose.y(),pose.theta(),iter.key);
 		pose_tree_.insert(node);
 	}
-
 }
 
+void AslamDemo::searchForLoopClosure(gtsam::NonlinearFactorGraph& factor_graph,gtsam::Values& values) {
+  ROS_INFO_STREAM("Search for loop closure");
+  for(auto const iter: values) {
+    gtsam::Pose2 pose = values.at<gtsam::Pose2>(iter.key);
+    poseNode input(pose.x(),pose.y(),pose.theta(),iter.key);
+    std::vector<poseNode> neighbours;
+    double limit = 1.0;
+    pose_tree_.find_within_range(input,limit,std::back_insert_iterator<std::vector<poseNode> >(neighbours));
+    if (!neighbours.size()) continue;
+//    std::pair<tree_type::const_iterator,double> found = pose_tree_.find_nearest(input);
+    ros::Time input_time = key_generator_.extractTimestamp(input.key_);
+    poseNode maxNode;
+    ros::Time max_node_stamp;
+    double angle_threshold = .5,time_threshold = 10.0,min_angle_dist = 100.0;
+    for(auto const &iter: neighbours) {
+      ros::Time neighbour_time = key_generator_.extractTimestamp(iter.key_);
+      double angle_dist = input.angleDistance(iter);
+      if((input_time - neighbour_time).toSec() > time_threshold && angle_dist <  angle_threshold) {
+        if(angle_dist < min_angle_dist) {
+          max_node_stamp = neighbour_time;
+          min_angle_dist = angle_dist;
+          maxNode = iter;
+        }
+      }
+    }
+    if(min_angle_dist == 100.0) continue;
+    auto iter1 = laserscans_.lower_bound(input_time);
+    auto iter2 = laserscans_.lower_bound(max_node_stamp);
+
+    if(iter1 != laserscans_.end() && iter2!=laserscans_.end()) {
+
+      mapping::RelativePoseEstimates relative_poses;
+      ROS_INFO_STREAM("Loop Closure Matching");
+      doScanMatch(iter1->second,iter2->second,relative_poses);
+      ROS_INFO_STREAM("Loop Closure Matching Done");
+
+      if(relative_poses.size() != 0) {
+        const gtsam::Pose2 relative_pose = relative_poses.begin()->relative_pose;
+        gtsam::noiseModel::Base::shared_ptr noise_model(gtsam::noiseModel::Gaussian::Covariance(relative_poses.begin()->cov, true));
+        gtsam::NonlinearFactor::shared_ptr factor(new factors::LaserScanFactor(input.key_, maxNode.key_, relative_pose, noise_model));
+        factor_graph.push_back(factor);
+      }
+    }
+
+   /* poseNode output;
+    ros::Time timestamp1,timestamp2;
+    double time_threshold = 10.0;
+    if(found.first != pose_tree_.end()) {
+
+      output = *(found.first);
+      timestamp1 = key_generator_.extractTimestamp(input.key_);
+      timestamp2 = key_generator_.extractTimestamp(output.key_);
+
+      if((timestamp1 - timestamp2).toSec() > time_threshold) {
+
+        auto iter1 = laserscans_.lower_bound(timestamp1);
+        auto iter2 = laserscans_.lower_bound(timestamp2);
+
+        if(iter1 != laserscans_.end() && iter2!=laserscans_.end()){
+
+          mapping::RelativePoseEstimates relative_poses;
+          ROS_INFO_STREAM("Loop Closure Matching");
+          doScanMatch(iter1->second,iter2->second,relative_poses);
+
+          if(relative_poses.size() != 0) {
+            const gtsam::Pose2 relative_pose = relative_poses.begin()->relative_pose;
+            gtsam::noiseModel::Base::shared_ptr noise_model(gtsam::noiseModel::Gaussian::Covariance(relative_poses.begin()->cov, true));
+            gtsam::NonlinearFactor::shared_ptr factor(new factors::LaserScanFactor(input.key_, output.key_, relative_pose, noise_model));
+            factor_graph.push_back(factor);
+          }
+        }
+      }
+
+      ROS_INFO_STREAM("Queried Pose:"<<"("<<input.d[0]<<","<<input.d[1]<<","<<input.d[2]<<")\t"<<"Returned Pose:("<<output.d[0]<<","<<output.d[1]<<","<<output.d[2]<<")"<<"T1:"<<key_generator_.extractTimestamp(input.key_)<<"\tT2:"<<key_generator_.extractTimestamp(output.key_));
+    }
+    else {
+      ROS_INFO_STREAM("KDTree search failed!!");
+    }*/
+  }
+}
 
 void AslamDemo::getTrueEstimates(gtsam::Values& input_estimates,gtsam::Values& true_estimates) {
 	for(auto const iter: input_estimates) {
@@ -224,7 +326,8 @@ void AslamDemo::slam() {
 //	pose_estimates = true_estimates;
 	current_pose_ = extractLatestPose(pose_estimates);
 	current_pose_.print("Current Pose: ");
-
+	searchForLoopClosure(factor_graph_,pose_estimates);
+	updateKDTree(pose_estimates);
 	if (!pose_estimates.size()) {
 		return;
 	}

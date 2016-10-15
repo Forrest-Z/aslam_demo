@@ -17,6 +17,8 @@
 #include <aslam_demo/mapping/map_processing.h>
 #include <aslam_demo/mapping/probability_map.h>
 #include <aslam_demo/factors/key_generator.h>
+#include <aslam_demo/factors/laser_scan_factor.h>
+
 #include <aslam_demo/mapping/csm_processing.h>
 #include <aslam_demo/mapping/optimization_processing.h>
 #include <aslam_demo/mapping/laserscan_processing.h>
@@ -66,14 +68,17 @@ class AslamDemo {
 private:
 
 	struct poseNode {
+
 	  typedef double value_type;
 
+	  poseNode() {
+
+	  }
 	  poseNode(value_type a, value_type b, value_type c,gtsam::Key key) {
 	    d[0] = a;
 	    d[1] = b;
 	    d[2] = c;
 	    key_ = key;
-
 	  }
 
 	  poseNode(const poseNode & x) {
@@ -84,27 +89,40 @@ private:
 	  }
 
 	  ~poseNode() {
-
 	  }
 
 	  double distance_to(poseNode const& x) const {
 	     double dist = 0;
-	     for (int i = 0; i != 3; ++i)
+	     for (int i = 0; i != 2; ++i)
 	        dist += (d[i]-x.d[i])*(d[i]-x.d[i]);
 	     return std::sqrt(dist);
 	  }
 
-	  inline value_type operator[](size_t const N) const { return d[N]; }
+	  double angleDistance(poseNode const& x) const {
+	    return((M_PI - fabs(fabs(d[3] - x.d[3]))) - M_PI);
+	  }
 
-	  value_type d[3];
+	  void operator=(poseNode const& A) {
+	    d[0] = A.d[0];
+	    d[1] = A.d[1];
+	    d[2] = A.d[2];
+	    key_ = A.key_;
+	  }
+
+	  inline value_type operator[](size_t const N) const { return d[N]; }
+    value_type d[3];
 	  gtsam::Key key_;
 
 	};
 
-	inline double tac( poseNode t, size_t k ) { return t[k]; }
-	typedef KDTree::KDTree<3, poseNode, std::pointer_to_binary_function<poseNode,size_t,double> > tree_type;
-    tree_type pose_tree_;
-    void updateKDTree(const gtsam::Values& );
+
+	static inline double tac( poseNode t, size_t k ) { return t[k]; }
+	double angledist(double a1,double a2) { return(M_PI - fabs(fabs(a1 - a2)) - M_PI); }
+	typedef KDTree::KDTree<2, poseNode, std::pointer_to_binary_function<poseNode,size_t,double> > tree_type;
+  tree_type pose_tree_;
+  void updateKDTree(const gtsam::Values& );
+  void searchForLoopClosure(gtsam::NonlinearFactorGraph& ,gtsam::Values& );
+  void doScanMatch(sensor_msgs::LaserScan&,sensor_msgs::LaserScan&,mapping::RelativePoseEstimates& );
 
 
 	ros::NodeHandle n_;
@@ -117,9 +135,9 @@ private:
 	geometry_msgs::Twist robot_command_;
 	nav_msgs::Odometry odometry_;
 	nav_msgs::OccupancyGrid current_map_;
-    mapping::ProbabilityMap prob_map_;
-    gtsam::Pose3 base_T_laser_;
-    gtsam::Pose2 current_pose_;
+  mapping::ProbabilityMap prob_map_;
+  gtsam::Pose3 base_T_laser_;
+  gtsam::Pose2 current_pose_;
 
 
 	ros::Publisher map_pub_;
