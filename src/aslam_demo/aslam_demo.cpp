@@ -235,7 +235,7 @@ void AslamDemo::searchForLoopClosure(gtsam::NonlinearFactorGraph& factor_graph,g
     auto iter1 = laserscans_.lower_bound(input_time);
     auto iter2 = laserscans_.lower_bound(max_node_stamp);
 
-    if(iter1 != laserscans_.end() && iter2!=laserscans_.end()) {
+    if(iter1 != laserscans_.end() && iter2 != laserscans_.end()) {
 
       mapping::RelativePoseEstimates relative_poses;
       ROS_INFO_STREAM("Loop Closure Matching");
