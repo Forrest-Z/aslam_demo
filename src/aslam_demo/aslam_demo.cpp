@@ -96,7 +96,7 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 	sensor_msgs::LaserScan current_scan = *scan_ptr;
 	doScanMatch(latest_scan,current_scan,laser_pose_cache_);
 
-    if (laser_pose_cache_.size()%200 == 0) {
+    if (laser_pose_cache_.size()%10 == 0) {
     	slam();
     }
 	laserscans_[scan_ptr->header.stamp] = *scan_ptr;
@@ -357,7 +357,7 @@ void AslamDemo::slam() {
 	ROS_INFO_STREAM("Map Formed");
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);
 	map_pub_.publish(current_map_);
-
+	doAslamStuff(current_map_);
 //	pose_estimates_.insert(pose_estimates);
 	factor_graph_.push_back(factor_graph);
 	laser_poses_.insert(laser_poses_.end(),laser_pose_cache_.begin(),laser_pose_cache_.end());
@@ -383,6 +383,18 @@ nav_msgs::Odometry AslamDemo::getCorrespondingOdom(const ros::Time &time_stamp,m
 	}
 	return odom;
 }
+
+void AslamDemo::doAslamStuff(nav_msgs::OccupancyGrid& occupancy_grid) {
+  std::vector<std::pair<int,int> > f;
+  aslam_.getFrontierCells(occupancy_grid,f);
+  ROS_INFO_STREAM("Frontier Size"<<f.size());
+  for(auto const iter:f) {
+    ROS_INFO_STREAM("Coordinates"<<iter.first<<"\t"<<iter.second);
+  }
+  aslam_.findFrontierClusters(f);
+  while(1);
+}
+
 
 void AslamDemo::fromTftoGtsamPose(gtsam::Pose3 &pose3, const tf::Transform &transform) {
 	tf::Vector3 translation = transform.getOrigin();

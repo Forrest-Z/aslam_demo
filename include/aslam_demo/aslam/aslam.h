@@ -60,9 +60,11 @@
 namespace aslam {
 
 class AslamBase {
-private:
+public:
+  AslamBase();
   void getFrontierCells(nav_msgs::OccupancyGrid& ,std::vector<std::pair<int,int> >& );
   void findFrontierClusters(std::vector<std::pair<int,int> >& );
+  ~AslamBase();
 };
 
 };

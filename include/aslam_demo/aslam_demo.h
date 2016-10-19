@@ -24,6 +24,7 @@
 #include <aslam_demo/mapping/laserscan_processing.h>
 #include <aslam_demo/mapping/odometry_processing.h>
 
+#include <aslam_demo/aslam/aslam.h>
 
 
 
@@ -124,7 +125,7 @@ private:
   void searchForLoopClosure(gtsam::NonlinearFactorGraph& ,gtsam::Values& );
   void doScanMatch(sensor_msgs::LaserScan&,sensor_msgs::LaserScan&,mapping::RelativePoseEstimates& );
 
-
+  aslam::AslamBase aslam_;
 	ros::NodeHandle n_;
 
 	laser_geometry::LaserProjection laser_projection_;
@@ -200,6 +201,7 @@ public:
 	void createLaserFactors();
 	void slamHandler();
 	void navigationHandler();
+	void doAslamStuff(nav_msgs::OccupancyGrid&);
 
 	std::mutex slam_mutex;
 	std::condition_variable slam_cv;
