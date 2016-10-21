@@ -162,6 +162,7 @@ add_library(aslam_demo
   include/aslam_demo/mapping/laserscan_processing.h
   include/aslam_demo/mapping/csm_processing.h
   include/aslam_demo/mapping/odometry_processing.h
+  include/aslam_demo/aslam/aslam.h
   
   src/aslam_demo/mapping/mapping_common.cpp
   src/aslam_demo/mapping/optimization_processing.cpp
@@ -177,6 +178,7 @@ add_library(aslam_demo
   src/aslam_demo/mapping/csm_processing.cpp
   src/aslam_demo/aslam_demo.cpp
   src/aslam_demo/mapping/odometry_processing.cpp 
+  src/aslam_demo/aslam/aslam.cpp
 
 )
 

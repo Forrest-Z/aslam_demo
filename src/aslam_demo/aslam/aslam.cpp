@@ -46,8 +46,8 @@ void AslamBase::getFrontierCells(nav_msgs::OccupancyGrid& occupancy_grid,std::ve
 
 void AslamBase::findFrontierClusters(std::vector<std::pair<int,int> >& frontier_indices) {
   int numPoints = frontier_indices.size();
-  cv::Mat points(numPoints,2,CV_32FC2),labels,centers;
-  int cluster_count = 3;
+  cv::Mat points(numPoints,2,CV_32FC1),labels,centers;
+  int cluster_count = 10;
   int index = 0;
   for(auto const iter: frontier_indices) {
     points.at<float>(index,0) = (float)(iter.first);
@@ -55,12 +55,13 @@ void AslamBase::findFrontierClusters(std::vector<std::pair<int,int> >& frontier_
     index++;
   }
 
+
   ROS_INFO_STREAM("Point"<<points.size());
-  double temp = cv::kmeans(points, cluster_count, labels,cv::TermCriteria(cv::TermCriteria::COUNT, 100000,0.01),30, cv::KMEANS_RANDOM_CENTERS , centers);
+  double temp = cv::kmeans(points, cluster_count, labels,cv::TermCriteria(cv::TermCriteria::EPS +cv::TermCriteria::COUNT, 1000,0.01),3, cv::KMEANS_PP_CENTERS , centers);
   ROS_INFO_STREAM("Temp"<<temp);
-  ROS_INFO_STREAM("Centers"<<labels.size());
-  for(int row = 0;row < numPoints;row++)
-      ROS_INFO_STREAM("Points:"<<labels.at<int>(row));
+  ROS_INFO_STREAM("Labels"<<labels.size()<<"\tCenters: "<<centers.size());
+  for(int row = 0;row < centers.rows;row++)
+      ROS_INFO_STREAM("Centers:"<<centers.at<float>(row,0)<<"\t"<<centers.at<float>(row,1));
 }
 
 AslamBase::~AslamBase() {

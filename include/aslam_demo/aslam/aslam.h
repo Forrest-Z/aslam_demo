@@ -55,6 +55,7 @@
 #include <condition_variable>
 
 #include <kdtree++/kdtree.hpp>
+#include <sbpl/discrete_space_information/environment_navxythetalat.h>
 
 
 namespace aslam {
