@@ -40,10 +40,14 @@ public:
 	ProbabilityMap(size_t rows = 1, size_t cols = 1, double cell_size = 1.0,
 			const gtsam::Point2& origin = gtsam::Point2(0.0, 0.0));
 
+	ProbabilityMap(nav_msgs::OccupancyGrid& occupancy_grid);
+
 	/**
 	 * Destructor
 	 */
 	~ProbabilityMap();
+
+	void setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_grid);
 
 	/**
 	 * GTSAM-style print function that writes to stdout
@@ -212,6 +216,8 @@ public:
     gtsam::Point2 end; ///< World coordinates of the exit point out of this cell
   } LineCell;
 
+
+  gtsam::Point2 findEndPoints(const gtsam::Point2& start_point, double length, double angle);
 	/**
 	 * Return a container of map points that exist along the line from start_point to end_point.
 	 * If the line extends off the map on either side, just the section of the

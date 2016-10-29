@@ -10,6 +10,7 @@ namespace factors {
 /* ************************************************************************* */
 KeyGenerator::KeyGenerator(double time_delta) {
   // Determine the max count associated with the specified time delta
+  time_delta = 0.0001;
   size_t max_count = 1.0 / time_delta;
 
   // Truncate the max count to an integer, and clip to fit inside a 24-bit counter
@@ -34,9 +35,8 @@ gtsam::Key KeyGenerator::generateKey(const key_type::Enum& key_type, const ros::
   //  (2) Stacking the 8-bit character code, the 32-bit seconds field, and the 24-bit time_delta_counts to form a 64-bit value
 
   // Create the index
-  size_t time_delta_counts = stamp.nsec / time_delta_nsec_;
+  size_t time_delta_counts = (stamp.nsec / time_delta_nsec_);
   size_t index = ((size_t)key_type << 56) + ((size_t)stamp.sec << 24) + ((size_t)time_delta_counts);
-
   // Create the GTSAM Key
   return gtsam::Key(index);
 }
@@ -50,10 +50,13 @@ key_type::Enum KeyGenerator::extractKeyType(const gtsam::Key& key) const {
 /* ************************************************************************* */
 ros::Time KeyGenerator::extractTimestamp(const gtsam::Key& key) const {
   // The seconds are encoded in bits 56->24
-  size_t sec = (key >> 24) & 0xFFFFFFFF;
+  //size_t sec = (key >> 24) & 0xFFFFFFFF;
+  uint32_t sec = (key >> 24) & 0xFFFFFFFF;
 
   // The nanoseconds are encoded in the bottom 24-bits, scaled by time_delta_
-  size_t nsec = (key & 0x00FFFFFF) * time_delta_nsec_;
+  size_t nsec = (key & 0x0000000000FFFFFF) * time_delta_nsec_;
+
+
 
   // Create a ROS Time object from the recovered seconds and nanoseconds
   return ros::Time(sec, nsec);

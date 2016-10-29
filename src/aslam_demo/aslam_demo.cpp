@@ -2,10 +2,13 @@
 
 namespace aslam_demo {
 
-AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerator(AslamDemo::time_tolerance)),isactive_slam_thread_(true) {
+AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_generator_(time_tolerance),isactive_slam_thread_(true) {
+  ROS_INFO_STREAM("A");
+
 	laser_sub_ = n_.subscribe<sensor_msgs::LaserScan>("/scan",1000000,boost::bind(&AslamDemo::scanCallback,this,_1));
 	odometry_sub_ = n_.subscribe<nav_msgs::Odometry>("/odom",1000,boost::bind(&AslamDemo::odomCallback,this,_1));
 	gazebo_model_state_sub_ = n_.subscribe<gazebo_msgs::ModelStates>("/gazebo/model_states",1000,boost::bind(&AslamDemo::gazeboModelStateCallback,this,_1));
+  tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_link","map" ));
 ///	f = std::bind(&AslamDemo::tac, this, _1, _2);
  	pose_tree_ = tree_type(std::ptr_fun(tac));
 	ROS_INFO_STREAM("A");
@@ -33,6 +36,7 @@ AslamDemo::AslamDemo(ros::NodeHandle n):n_(n),key_generator_(factors::KeyGenerat
   map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
   model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
 	ROS_INFO_STREAM("D");
+  aslam_ = std::make_shared<aslam::AslamBase>(n);
 
    // slam_thread_ = std::thread(&AslamDemo::slamHandler,this);
 }
@@ -141,41 +145,53 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 
   ROS_INFO_STREAM("Connect with odom entered");
 	gtsam::KeySet keys = factor_graph.keys();
-	mapping::Timestamps timestamps;
+	mapping::Timestamps extracted_timestamps,timestamps;
 	gtsam::Vector sigmas(6);
 	double time_threshold = 5.0;
 	ros::Time curr_time,prev_time;
 	ros::Duration delta_time;
-	gtsam::KeySet keys_copy(keys);
+	for(auto const iter:keys) {
+	  ros::Time timestamp = key_generator_.extractTimestamp(iter);
+	  if(key_generator_.generateKey(factors::key_type::Pose2,timestamp) == iter) ROS_INFO_STREAM("I'm not insane");
+	  extracted_timestamps.insert(timestamp);
+	}
 	sigmas<<0.1,0.1,0.1,0.1,0.1,0.1;
-	for (auto const iter: keys_copy) {
+	bool is_first = true;
+	for (auto const curr_time: extracted_timestamps) {
 //		ROS_INFO_STREAM("Keys:"<<iter);
-	  curr_time = key_generator_.extractTimestamp(iter);
-	  if(*(keys_copy.begin()) != iter) {
+	 // curr_time = key_generator_.extractTimestamp(iter);
+
+	  if(!is_first) {
 	    delta_time = curr_time - prev_time;
 	    ros::Time new_time = prev_time;
 
 	    if(delta_time.toSec() > time_threshold) {
 	      while(new_time < curr_time) {
+
 	        ROS_INFO_STREAM("New Time"<<new_time<<"Delta_time"<<delta_time.toSec());
           new_time += ros::Duration(1.0);
           gtsam::Key new_key = key_generator_.generateKey(factors::key_type::Pose2,new_time);
           keys.insert(new_key);
           timestamps.insert(new_time);
+
 	      }
 	    }
 	  }
+	  is_first = false;
 		timestamps.insert(curr_time);
 		prev_time = curr_time;
 //		initial_guess_.insert(iter,gtsam::Pose2(0.0,0.0,0.0));
 	}
 	if(!timestamps.size()) return;
+  for(auto const iter: timestamps) ROS_INFO_STREAM("Timestamp"<<iter);
 
 	mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,time_tolerance);
+  for(auto const iter: relative_estimates) iter.relative_pose.print("Rel P");
+
 	gtsam::NonlinearFactorGraph odom_graph = mapping::odometry::createOdometryFactors(relative_estimates,time_tolerance,keys);
 
 	gtsam::Pose2 curr_pose = current_pose_;
-
+	odom_graph.print("Odom Graph");
 	auto ptr = keys.begin();
 	initial_guess.insert(*ptr,curr_pose);
 
@@ -207,7 +223,9 @@ void AslamDemo::updateKDTree(const gtsam::Values& values) {
 }
 
 void AslamDemo::searchForLoopClosure(gtsam::NonlinearFactorGraph& factor_graph,gtsam::Values& values) {
-  ROS_INFO_STREAM("Search for loop closure");
+  ROS_INFO_STREAM("Search for loop closure"<<factor_graph.size()<<"\t"<<values.size());
+  if(factor_graph.size()) return;
+
   for(auto const iter: values) {
     gtsam::Pose2 pose = values.at<gtsam::Pose2>(iter.key);
     poseNode input(pose.x(),pose.y(),pose.theta(),iter.key);
@@ -319,6 +337,8 @@ void AslamDemo::slam() {
 		ROS_INFO_STREAM("Not Validated!!");
 		return;
 	}
+	factor_graph.print();
+	initial_guess.print();
 //	pose_estimates_ = mapping::optimization::optimizeFactorGraph(factor_graph_,initial_guess_,parameters_);
 	pose_estimates = mapping::optimization::optimizeFactorGraph(factor_graph,initial_guess,parameters_);
 //	gtsam::Values true_estimates;
@@ -385,14 +405,12 @@ nav_msgs::Odometry AslamDemo::getCorrespondingOdom(const ros::Time &time_stamp,m
 }
 
 void AslamDemo::doAslamStuff(nav_msgs::OccupancyGrid& occupancy_grid) {
-  std::vector<std::pair<int,int> > f;
-  aslam_.getFrontierCells(occupancy_grid,f);
+  std::vector<std::pair<int,int> > f,g;
+  aslam_->getFrontierCells(occupancy_grid,f);
   ROS_INFO_STREAM("Frontier Size"<<f.size());
-  for(auto const iter:f) {
-    ROS_INFO_STREAM("Coordinates"<<iter.first<<"\t"<<iter.second);
-  }
-  aslam_.findFrontierClusters(f);
-  while(1);
+
+  aslam_->findFrontierClusters(f,g);
+ // while(1);
 }
 
 

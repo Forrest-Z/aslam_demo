@@ -51,6 +51,9 @@
   <build_depend>csm_ros</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>laser_geometry</build_depend>
+  <build_depend>dwa_local_planner</build_depend>
+  <build_depend>costmap_2d</build_depend>
+
   <run_depend>geometry_msgs</run_depend>
   <run_depend>gtsam_ros</run_depend>
   <run_depend>pcl_ros</run_depend>
@@ -62,6 +65,8 @@
   <run_depend>nav_msgs</run_depend>
   <run_depend>csm_ros</run_depend>
   <run_depend>laser_geometry</run_depend>
+  <run_depend>dwa_local_planner</run_depend>
+  <run_depend>costmap_2d</run_depend>
 
 
 

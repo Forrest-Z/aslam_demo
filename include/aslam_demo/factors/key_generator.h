@@ -80,7 +80,8 @@ public:
   ros::Time computeQuantizedTimestamp(const ros::Time& stamp) const;
 
 protected:
-  unsigned int time_delta_nsec_; ///< The maximum time difference that may be considered the same time/key/index/pose (in nanoseconds)
+  //unsigned int time_delta_nsec_; ///< The maximum time difference that may be considered the same time/key/index/pose (in nanoseconds)
+  uint32_t time_delta_nsec_;
 };
 
 

@@ -17,6 +17,10 @@ ProbabilityMap::ProbabilityMap(size_t rows, size_t cols, double cell_size, const
 	: data_(gtsam::Matrix::Zero(rows, cols)), origin_(origin), cell_size_(cell_size) {
 }
 
+ProbabilityMap::ProbabilityMap(nav_msgs::OccupancyGrid& occupancy_grid) {
+  setfromOccupancyGrid(occupancy_grid);
+}
+
 /* ************************************************************************* */
 ProbabilityMap::~ProbabilityMap() {
 }
@@ -38,6 +42,17 @@ std::ostream& operator<< (std::ostream& stream, const ProbabilityMap& map) {
 	}
 	stream << std::endl;
 	return stream;
+}
+
+
+void ProbabilityMap::setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_grid) {
+  origin_ = gtsam::Point2(occupancy_grid.info.origin.position.x,occupancy_grid.info.origin.position.y);
+  cell_size_ = occupancy_grid.info.resolution;
+  data_ = gtsam::Matrix::Zero(occupancy_grid.info.height,occupancy_grid.info.width);
+  for(size_t row = 0;row < rows();row++)
+    for(size_t col = 0;col < cols();col++) {
+      data_(row,col) = ProbabilityToLogOdds((255.0 - (double)(occupancy_grid.data[row*cols() + col]))/255.0);
+    }
 }
 
 /* ************************************************************************* */
@@ -193,6 +208,11 @@ void ProbabilityMap::smooth(double sigma) {
   kernel_1d.transposeInPlace();
   data_ = conv2d(data_, kernel_1d);
 }
+
+gtsam::Point2 ProbabilityMap::findEndPoints(const gtsam::Point2& start_point, double length, double angle) {
+  return (gtsam::Point2(start_point.x()+length*cos(angle),start_point.y()+length*sin(angle)));
+}
+
 
 /* ************************************************************************* */
 std::vector<ProbabilityMap::LineCell> ProbabilityMap::line(const gtsam::Point2& start_point_world, const gtsam::Point2& end_point_world) const {

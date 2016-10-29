@@ -176,6 +176,10 @@ RelativePoseEstimates computeRelativePoses(const Odometry& odometry, const Times
       delta(3) = time_increment;
       relative_pose.cov = H2 * relative_pose.cov * H2.transpose() + (G * delta)*(G * delta).transpose();
     }
+    if(isnan(relative_pose.relative_pose.x()) || isnan(relative_pose.relative_pose.y()) || isnan(relative_pose.relative_pose.theta())) {
+      relative_pose.relative_pose = gtsam::Pose2(0.0,0.0,0.0);
+      relative_pose.cov = gtsam::Matrix::Zero(3,3);
+    }
 
     // Insert the computed relative pose into the results
     relative_poses.push_back(relative_pose);

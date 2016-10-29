@@ -125,7 +125,7 @@ private:
   void searchForLoopClosure(gtsam::NonlinearFactorGraph& ,gtsam::Values& );
   void doScanMatch(sensor_msgs::LaserScan&,sensor_msgs::LaserScan&,mapping::RelativePoseEstimates& );
 
-  aslam::AslamBase aslam_;
+  std::shared_ptr<aslam::AslamBase> aslam_;
 	ros::NodeHandle n_;
 
 	laser_geometry::LaserProjection laser_projection_;
@@ -157,38 +157,38 @@ private:
 	nav_msgs::GetMap srv_map_;
 	gazebo_msgs::GetModelState model_state_srv_;
 
-    mapping::LaserScans laserscans_;
-    mapping::Odometry odomreadings_;
-    mapping::Odometry trueodomreadings_;
+  mapping::LaserScans laserscans_;
+  mapping::Odometry odomreadings_;
+  mapping::Odometry trueodomreadings_;
 
-    mapping::RelativePoseEstimates laser_poses_;
-    mapping::RelativePoseEstimates laser_pose_cache_;
+  mapping::RelativePoseEstimates laser_poses_;
+  mapping::RelativePoseEstimates laser_pose_cache_;
 
-    factors::KeyGenerator key_generator_;
+  factors::KeyGenerator key_generator_;
 
-    double time_tolerance = 0.0001;
-    bool map_initialized_ = false;
+  const double time_tolerance;
+  bool map_initialized_ = false;
 
-    gtsam::NonlinearFactorGraph factor_graph_;
-    gtsam::Values initial_guess_,pose_estimates_; //@todo:initial_guess
-    mapping::optimization::Covariances pose_with_cov_;
-    gtsam::LevenbergMarquardtParams parameters_; //@todo:parameters
+  gtsam::NonlinearFactorGraph factor_graph_;
+  gtsam::Values initial_guess_,pose_estimates_; //@todo:initial_guess
+  mapping::optimization::Covariances pose_with_cov_;
+  gtsam::LevenbergMarquardtParams parameters_; //@todo:parameters
 
-    gtsam::Pose2 getRelativeOdom(nav_msgs::Odometry &,nav_msgs::Odometry &);
-    nav_msgs::Odometry getCorrespondingOdom(const ros::Time &,mapping::Odometry&);
-    nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
-    void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
-    void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
+  gtsam::Pose2 getRelativeOdom(nav_msgs::Odometry &,nav_msgs::Odometry &);
+  nav_msgs::Odometry getCorrespondingOdom(const ros::Time &,mapping::Odometry&);
+  nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
+  void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
+  void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
 
-    void createZeroInitialGuess();
-    void connectWithOdometry(gtsam::NonlinearFactorGraph&,gtsam::Values&);
-    gtsam::Pose2 extractLatestPose(const gtsam::Values&);
+  void createZeroInitialGuess();
+  void connectWithOdometry(gtsam::NonlinearFactorGraph&,gtsam::Values&);
+  gtsam::Pose2 extractLatestPose(const gtsam::Values&);
 
-    void getTrueEstimates(gtsam::Values& ,gtsam::Values& );
-    void FromQuaternionToRPY(tf::Quaternion& ,double& ,double&, double&);
+  void getTrueEstimates(gtsam::Values& ,gtsam::Values& );
+  void FromQuaternionToRPY(tf::Quaternion& ,double& ,double&, double&);
 
 public:
-	AslamDemo(ros::NodeHandle);
+	AslamDemo(ros::NodeHandle&);
 	~AslamDemo();
 	std::atomic<bool> isactive_laser_factor_thread_,isactive_slam_thread_,isactive_navigation_thread_;
 

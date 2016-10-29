@@ -3,9 +3,317 @@
 #include <opencv2/core/core.hpp>
 
 namespace aslam {
-AslamBase::AslamBase() {
+AslamBase::AslamBase(ros::NodeHandle& n):
+n_(n),
+tf_listener_(ros::Duration(100)),
+costmap2dros_("costmap",tf_listener_),
+local_planner_(std::make_shared<dwa_local_planner::DWAPlannerROS>()),
+alpha_(1.0) {
+  ROS_INFO_STREAM("A");
+
+
+  local_planner_->initialize("local",&tf_listener_,&costmap2dros_);
+  velocity_publisher_  = n_.advertise<geometry_msgs::Twist>("command",1);
+  probability_map_ = mapping::ProbabilityMap(occupancy_grid_);
+}
+
+void AslamBase::driveRobot(rosTrajectory& trajectory) {
+  //@todo: figure out where this comes from
+//  setSPBLEnvfromOccupancyGrid(env_,occupancy_grid_,MotPrimFilename_);
+//  planxythetalat(env_,start,goal,spbl_global_path_);
+//  fromSPBLtoROSpath(spbl_global_path_,ros_global_path_);
+  local_planner_->setPlan(trajectory);
+  geometry_msgs::Twist cmd_vel;
+  while(!local_planner_->isGoalReached()) {
+    bool success = local_planner_->computeVelocityCommands(cmd_vel);
+    velocity_publisher_.publish(cmd_vel);
+
+  }
+}
+
+void AslamBase::mainAslamAlgorithm() {
+  vectorOfIndices frontier_indices,cluster_centers;
+  gtsam::Pose2 current_pose_;
+  getFrontierCells(occupancy_grid_,frontier_indices);
+  findFrontierClusters(frontier_indices,cluster_centers);
+
+  spblTrajectoryList trajectory_list;
+  for(auto const &iter: cluster_centers) {
+    spblTrajectory trajectory;
+    gtsam::Pose2 goal(iter.first,iter.second,0.0); //@todo get good estimate of orientation
+    planxythetalat(env_,current_pose_,goal,trajectory);
+    trajectory_list.push_back(trajectory);
+  }
+
+  spblTrajectory best_trajectory;
+  selectTrajectory(probability_map_,trajectory_list,best_trajectory);
+  rosTrajectory trajectory;
+  fromSPBLtoROSpath(best_trajectory,trajectory);
+  driveRobot(trajectory);
+
 
 }
+
+
+void AslamBase::predictedMeasurement(mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& predicted_scans) {
+  std::vector<double> angles;//@todo figure the sensor information
+  double laser_range = 3.5;
+  double occupancy_probability = 0.8;
+  for(auto const &pose: trajectory) {
+    sensor_msgs::LaserScan laser_scan;
+    gtsam::Point2 start_point = gtsam::Point2(pose.x,pose.y);
+    double angle_offset = 0;//@todo change this to pose.theta
+    for(auto const &angle: angles) {
+      gtsam::Point2 end_point = probability_map.findEndPoints(start_point,laser_range,angle + angle_offset);
+      std::vector<mapping::ProbabilityMap::LineCell> line_cell = probability_map.line(start_point,end_point);
+      bool is_special = false;
+      double expected_range = 0.0;
+      //@todo Make it better. Now its shitty
+      for(auto const &ele: line_cell) {
+        double value = probability_map.at(ele.row,ele.col);
+        if(!is_special && value > occupancy_probability) {
+          gtsam::Point2 mid_point((ele.start.x() + ele.end.x())/2,(ele.start.y() + ele.end.y())/2);
+          expected_range = start_point.dist(mid_point);
+        }
+      }
+      laser_scan.ranges.push_back(expected_range);
+    }
+    predicted_scans.push_back(laser_scan);
+  }
+}
+
+void AslamBase::getProbabilityMaps(const mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& measurements,ProbabilityMaps& probability_maps) {
+  mapping::ProbabilityMap current_map(probability_map);
+  mapping::sensor_models::LaserScanModel laser_scan_model;
+  gtsam::Pose3 base_T_laser; //@todo get this from somewhere
+  if (trajectory.size() != measurements.size()) ROS_ERROR("Size not Equal");
+  for(size_t i = 0;i < trajectory.size();i++) {
+    auto pose = trajectory[i];
+    auto measurement  = measurements[i];
+    gtsam::Pose2 world_T_base(pose.x,pose.y,pose.theta);
+    laser_scan_model.updateMap(current_map,measurement,world_T_base,base_T_laser);
+    probability_maps.push_back(current_map);
+  }
+}
+
+double AslamBase::shannonEntropy(const mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& predicted_scans) {
+  double entropy = 0.0;
+  //@todo Use differential approach later. This is too fucking naive
+  for(size_t row = 0;row < probability_map.rows();row++)
+    for(size_t col = 0;col < probability_map.cols(); col++) {
+      double probability = probability_map.at(row,col);
+      entropy += probability*log(probability) + (1 - probability)*log(1 - probability);
+    }
+  return(-entropy);
+}
+
+
+double AslamBase::renyiEntopy(mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& predicted_scans) {
+  double entropy;
+  double alpha = 1.0;
+  for(size_t row = 0;row < probability_map.rows();row++)
+     for(size_t col = 0;col < probability_map.cols(); col++) {
+       double probability = probability_map.at(row,col);
+       entropy += pow(probability,alpha);
+     }
+  return(log(entropy)/(1 - alpha));
+
+}
+
+void AslamBase::selectTrajectory(mapping::ProbabilityMap& probability_map, spblTrajectoryList &trajectory_list,spblTrajectory best_trajectory) {
+  double best_score = -100.0;
+  size_t max_index = 0.0;
+  for (size_t index = 0;index < trajectory_list.size(); index++) {
+    double score = utilityOfTrajectory(probability_map,trajectory_list[index]);
+    if(best_score < score) {
+      best_score = score;
+      max_index = index;
+    }
+  }
+  best_trajectory = trajectory_list[max_index];
+}
+
+
+double AslamBase::utilityOfTrajectory(mapping::ProbabilityMap& probability_map, spblTrajectory &trajectory) {
+  LaserScanList predicted_scans;
+  predictedMeasurement(probability_map,trajectory,predicted_scans);
+  ProbabilityMaps probability_maps;
+  getProbabilityMaps(probability_map,trajectory,predicted_scans,probability_maps);
+  double utility = 0.0;
+  for(auto const &prob_map: probability_maps) {
+    utility += shannonEntropy(prob_map,trajectory,predicted_scans);
+  }
+  return(utility);
+}
+
+/*
+
+void AslamBase::setCostMapfromOccGrid(nav_msgs::OccupancyGrid& occupancy_grid,costmap_2d::Costmap2DROS& costmap2dros){
+  size_t height = occupancy_grid.info.height, width =  occupancy_grid.info.width;
+  double resolution = occupancy_grid.info.resolution;
+  double origin_x = occupancy_grid.info.origin.position.x, origin_y = occupancy_grid.info.origin.position.y;
+  unsigned char data = occupancy_grid.data;
+  costmap_2d::Costmap2D costmap2d(height,width,resolution,origin_x,origin_y);
+  costmap2dros.getCostmap()->Costmap2D = costmap2d;
+}
+*/
+
+
+void AslamBase::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter) {
+    sbpl_2Dpt_t pt_m;
+    double halfwidth = 0.01;
+    double halflength = 0.01;
+    pt_m.x = -halflength;
+    pt_m.y = -halfwidth;
+    perimeter.push_back(pt_m);
+    pt_m.x = halflength;
+    pt_m.y = -halfwidth;
+    perimeter.push_back(pt_m);
+    pt_m.x = halflength;
+    pt_m.y = halfwidth;
+    perimeter.push_back(pt_m);
+    pt_m.x = -halflength;
+    pt_m.y = halfwidth;
+    perimeter.push_back(pt_m);
+}
+
+
+void AslamBase::setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_msgs::OccupancyGrid& occupancy_grid, char* MotPrimFilename) {
+  int height = occupancy_grid.info.height;
+  int width = occupancy_grid.info.width;
+  unsigned char mapdata[height*width];
+  for(size_t i = 0;i < height*width;i++) {
+    char data = occupancy_grid.data[i];
+    if(data == -1 ) data = 50;
+    mapdata[i] = (uchar)(data);
+  }
+  double startx = 0.0,starty = 0.0,starttheta = 0.0,goalx = 0.0,goaly = 0.0,goaltheta = 0.0;
+  double goaltol_x = 0.001,goaltol_y = 0.001,goaltol_theta = 0.001;
+  std::vector< sbpl_2Dpt_t > perimeterptsV;
+  createFootprint(perimeterptsV);
+  double cellsize_m = occupancy_grid.info.resolution;
+  double nominalvel_mpersecs = 0.1;
+  double timetoturn45degsinplace_secs = 0.1;
+  unsigned char obsthresh = 0.5;
+  env.InitializeEnv(width,height,mapdata,startx,starty,starttheta,goalx,goaly,goaltheta,goaltol_x,goaltol_y,goaltol_theta,perimeterptsV,cellsize_m,nominalvel_mpersecs,timetoturn45degsinplace_secs,obsthresh,MotPrimFilename);
+}
+
+void initializePlanner(std::shared_ptr<SBPLPlanner>& planner,
+                       EnvironmentNAVXYTHETALAT& env,
+                       int start_id, int goal_id,
+                       double initialEpsilon,
+                       bool bsearchuntilfirstsolution){
+    // work this out later, what is bforwardsearch?
+    bool bsearch = false;
+    planner = std::make_shared<ARAPlanner>(&env, bsearch);
+
+    // set planner properties
+    if (planner->set_start(start_id) == 0) {
+        printf("ERROR: failed to set start state\n");
+        throw new SBPL_Exception();
+    }
+    if (planner->set_goal(goal_id) == 0) {
+        printf("ERROR: failed to set goal state\n");
+        throw new SBPL_Exception();
+    }
+    planner->set_initialsolution_eps(initialEpsilon);
+    planner->set_search_mode(bsearchuntilfirstsolution);
+}
+
+int runPlanner(std::shared_ptr<SBPLPlanner>&  planner, int allocated_time_secs,
+               std::vector<int>& solution_stateIDs) {
+    int bRet = planner->replan(allocated_time_secs, &solution_stateIDs);
+
+    if (bRet)
+        printf("Solution is found\n");
+    else
+        printf("Solution does not exist\n");
+    return bRet;
+}
+
+void writeSolution(EnvironmentNAVXYTHETALAT& env, std::vector<int> solution_stateIDs,
+    const char* filename) {
+
+  std::string discrete_filename(std::string(filename) + std::string(".discrete"));
+  FILE* fSol_discrete = fopen(discrete_filename.c_str(), "w");
+  FILE* fSol = fopen(filename, "w");
+  if (fSol == NULL) {
+      printf("ERROR: could not open solution file\n");
+      throw SBPL_Exception();
+  }
+
+  // write the discrete solution to file
+  for (size_t i = 0; i < solution_stateIDs.size(); i++) {
+      int x, y, theta;
+      env.GetCoordFromState(solution_stateIDs[i], x, y, theta);
+      double cont_x, cont_y, cont_theta;
+      cont_x = DISCXY2CONT(x, 0.1);
+      cont_y = DISCXY2CONT(y, 0.1);
+      cont_theta = DiscTheta2Cont(theta, 16);
+      fprintf(fSol_discrete, "%d %d %d\n", x, y, theta);
+  }
+  fclose(fSol_discrete);
+
+  // write the continuous solution to file
+  std::vector<sbpl_xy_theta_pt_t> xythetaPath;
+  env.ConvertStateIDPathintoXYThetaPath(&solution_stateIDs, &xythetaPath);
+  for (unsigned int i = 0; i < xythetaPath.size(); i++) {
+      fprintf(fSol, "%.3f %.3f %.3f\n", xythetaPath.at(i).x,
+                                        xythetaPath.at(i).y,
+                                        xythetaPath.at(i).theta);
+  }
+  fclose(fSol);
+
+}
+
+void getSBPLpathfromID(EnvironmentNAVXYTHETALAT& env, const std::vector<int>& solution_stateIDs, std::vector<sbpl_xy_theta_pt_t> &xythetaPath) {
+  for (size_t i = 0; i < solution_stateIDs.size(); i++) {
+        int x, y, theta;
+        env.GetCoordFromState(solution_stateIDs[i], x, y, theta);
+        double cont_x, cont_y, cont_theta;
+        cont_x = DISCXY2CONT(x, 0.1);
+        cont_y = DISCXY2CONT(y, 0.1);
+        cont_theta = DiscTheta2Cont(theta, 16);
+        xythetaPath.push_back(sbpl_xy_theta_pt_t(cont_x,cont_y,cont_theta));
+   }
+}
+
+
+void AslamBase::planxythetalat(EnvironmentNAVXYTHETALAT& env,gtsam::Pose2& start,gtsam::Pose2& goal,std::vector<sbpl_xy_theta_pt_t> &xythetaPath) {
+  int start_id = env.SetStart(start.x(), start.y(), start.theta());
+  int goal_id = env.SetGoal(goal.x(), goal.y(), goal.theta());
+
+  double initialEpsilon = 3.0;
+  bool bsearchuntilfirstsolution = false;
+  initializePlanner(planner_,env,start_id,goal_id,initialEpsilon,bsearchuntilfirstsolution);
+
+  std::vector<int> solution_stateIDs;
+  double allocated_time_secs = 10.0;
+  runPlanner(planner_,allocated_time_secs,solution_stateIDs);
+
+  //env.ConvertStateIDPathintoXYThetaPath(&solution_stateIDs, &xythetaPath);
+  getSBPLpathfromID(env,solution_stateIDs,xythetaPath);
+
+}
+
+
+void AslamBase::fromSPBLtoROSpath(std::vector<sbpl_xy_theta_pt_t> &xythetaPath, std::vector< geometry_msgs::PoseStamped > &plan) {
+  for(auto const &iter: xythetaPath) {
+    geometry_msgs::PoseStamped pose_stamped;
+    pose_stamped.header.frame_id = "map";
+    pose_stamped.pose.position.x = iter.x;
+    pose_stamped.pose.position.y = iter.y;
+    pose_stamped.pose.position.z = 0.0;
+
+    tf::Quaternion q;
+    q.setEuler(iter.theta,0.0,0.0);
+    tf::quaternionTFToMsg(q,pose_stamped.pose.orientation);
+
+    plan.push_back(pose_stamped);
+  }
+}
+
+
 
 void AslamBase::getFrontierCells(nav_msgs::OccupancyGrid& occupancy_grid,std::vector<std::pair<int,int> >& frontier_indices) {
 
@@ -44,7 +352,7 @@ void AslamBase::getFrontierCells(nav_msgs::OccupancyGrid& occupancy_grid,std::ve
   }
 }
 
-void AslamBase::findFrontierClusters(std::vector<std::pair<int,int> >& frontier_indices) {
+void AslamBase::findFrontierClusters(vectorOfIndices& frontier_indices,vectorOfIndices& cluster_centers) {
   int numPoints = frontier_indices.size();
   cv::Mat points(numPoints,2,CV_32FC1),labels,centers;
   int cluster_count = 10;
@@ -56,12 +364,14 @@ void AslamBase::findFrontierClusters(std::vector<std::pair<int,int> >& frontier_
   }
 
 
-  ROS_INFO_STREAM("Point"<<points.size());
+  //ROS_INFO_STREAM("Point"<<points.size());
   double temp = cv::kmeans(points, cluster_count, labels,cv::TermCriteria(cv::TermCriteria::EPS +cv::TermCriteria::COUNT, 1000,0.01),3, cv::KMEANS_PP_CENTERS , centers);
-  ROS_INFO_STREAM("Temp"<<temp);
-  ROS_INFO_STREAM("Labels"<<labels.size()<<"\tCenters: "<<centers.size());
-  for(int row = 0;row < centers.rows;row++)
-      ROS_INFO_STREAM("Centers:"<<centers.at<float>(row,0)<<"\t"<<centers.at<float>(row,1));
+  //ROS_INFO_STREAM("Temp"<<temp);
+  //ROS_INFO_STREAM("Labels"<<labels.size()<<"\tCenters: "<<centers.size());
+  for(int row = 0;row < centers.rows;row++) {
+    //  ROS_INFO_STREAM("Centers:"<<centers.at<float>(row,0)<<"\t"<<centers.at<float>(row,1));
+      cluster_centers.push_back(std::make_pair(centers.at<float>(row,0),centers.at<float>(row,1)));
+  }
 }
 
 AslamBase::~AslamBase() {
