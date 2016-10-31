@@ -5,10 +5,13 @@ namespace aslam_demo {
 AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_generator_(time_tolerance),isactive_slam_thread_(true) {
   ROS_INFO_STREAM("A");
 
+  ROS_INFO_STREAM("Transform Sent");
+  tf_init_thread_ = std::make_shared<std::thread>(boost::bind(&AslamDemo::tfInit,this));
+  aslam_ = std::make_shared<aslam::AslamBase>(n);
+
 	laser_sub_ = n_.subscribe<sensor_msgs::LaserScan>("/scan",1000000,boost::bind(&AslamDemo::scanCallback,this,_1));
 	odometry_sub_ = n_.subscribe<nav_msgs::Odometry>("/odom",1000,boost::bind(&AslamDemo::odomCallback,this,_1));
 	gazebo_model_state_sub_ = n_.subscribe<gazebo_msgs::ModelStates>("/gazebo/model_states",1000,boost::bind(&AslamDemo::gazeboModelStateCallback,this,_1));
-  tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "base_link","map" ));
 ///	f = std::bind(&AslamDemo::tac, this, _1, _2);
  	pose_tree_ = tree_type(std::ptr_fun(tac));
 	ROS_INFO_STREAM("A");
@@ -28,7 +31,7 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
 
 	current_pose_ = gtsam::Pose2(0.0,0.0,0.0);
 	transform.setIdentity();
-	map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("curr_map",1);
+	map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("map",1);
 	pose_pub_ = n_.advertise<geometry_msgs::Pose2D>("curr_pose",1);
 	command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
 	ROS_INFO_STREAM("C");
@@ -36,7 +39,6 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
   map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
   model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
 	ROS_INFO_STREAM("D");
-  aslam_ = std::make_shared<aslam::AslamBase>(n);
 
    // slam_thread_ = std::thread(&AslamDemo::slamHandler,this);
 }
@@ -45,7 +47,15 @@ void AslamDemo::getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap
 
 }
 
+void AslamDemo::tfInit() {
+  int wait = 100000;
+    while(--wait) {
+    tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "/base_link","/map" ));
+    tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now()+ros::Duration(5.0), "/base_link","/map" ));
 
+   }
+
+}
 
 
 void AslamDemo::gazeboModelStateCallback(const gazebo_msgs::ModelStates::ConstPtr& input) {
@@ -357,11 +367,11 @@ void AslamDemo::slam() {
 //	pose_estimates_.print("Pose Estimates");
 //	prob_map_.clear();
 	if (!map_initialized_) {
-			prob_map_ = mapping::map::createEmptyMap(pose_estimates,.02,15);
+			prob_map_ = mapping::map::createEmptyMap(pose_estimates,.025,15.0);
 			map_initialized_ = true;
 	}
 
-	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,"map");
+	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,"curr_map");
 
 	ROS_INFO_STREAM("Map Initialized");
 	ROS_INFO_STREAM("Map Formed!!");
@@ -374,10 +384,10 @@ void AslamDemo::slam() {
 	fromGtsamPose2toTf(current_pose_,transform);
 	tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(), "base_link","map" ));
 
-	ROS_INFO_STREAM("Map Formed");
+	ROS_INFO_STREAM("Map Formed"<<prob_map_.origin());
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);
 	map_pub_.publish(current_map_);
-	doAslamStuff(current_map_);
+	doAslamStuff(prob_map_);
 //	pose_estimates_.insert(pose_estimates);
 	factor_graph_.push_back(factor_graph);
 	laser_poses_.insert(laser_poses_.end(),laser_pose_cache_.begin(),laser_pose_cache_.end());
@@ -404,12 +414,13 @@ nav_msgs::Odometry AslamDemo::getCorrespondingOdom(const ros::Time &time_stamp,m
 	return odom;
 }
 
-void AslamDemo::doAslamStuff(nav_msgs::OccupancyGrid& occupancy_grid) {
-  std::vector<std::pair<int,int> > f,g;
+void AslamDemo::doAslamStuff(mapping::ProbabilityMap& map) {
+  /*std::vector<std::pair<int,int> > f,g;
   aslam_->getFrontierCells(occupancy_grid,f);
   ROS_INFO_STREAM("Frontier Size"<<f.size());
 
-  aslam_->findFrontierClusters(f,g);
+  aslam_->findFrontierClusters(f,g);*/
+  aslam_->updateFromProbMap(map,current_pose_);
  // while(1);
 }
 

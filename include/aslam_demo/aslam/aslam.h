@@ -1,3 +1,6 @@
+
+#define ROS
+
 #include <ros/ros.h>
 #include <ros/subscriber.h>
 #include <ros/publisher.h>
@@ -61,6 +64,9 @@
 #include <kdtree++/kdtree.hpp>
 #include <sbpl/headers.h>
 
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
+
 namespace aslam {
 
 class AslamBase {
@@ -76,6 +82,10 @@ public:
 
   AslamBase(ros::NodeHandle& n);
   ros::NodeHandle n_;
+  tf::TransformListener tf_listener_;
+
+  costmap_2d::Costmap2DROS costmap2dros_;
+
   nav_msgs::OccupancyGrid occupancy_grid_;
   mapping::ProbabilityMap probability_map_;
   EnvironmentNAVXYTHETALAT env_;
@@ -83,11 +93,16 @@ public:
   std::shared_ptr<dwa_local_planner::DWAPlannerROS> local_planner_;
   spblTrajectory spbl_global_path_;
   rosTrajectory ros_global_path_;
-  tf::TransformListener tf_listener_;
-  costmap_2d::Costmap2DROS costmap2dros_;
   char* MotPrimFilename_;
+  gtsam::Pose2 current_pose_;
 
   ros::Publisher velocity_publisher_;
+  ros::Publisher vis_publisher;
+  visualization_msgs::MarkerArray marker_array_;
+  //All interface stuff
+  void updateFromProbMap(mapping::ProbabilityMap& probability_map,gtsam::Pose2 current_pose);
+  void updateFromOccMap(nav_msgs::OccupancyGrid& occupancy_grid,gtsam::Pose2 current_pose);
+
 
   //spbl stuff
   void createFootprint(std::vector<sbpl_2Dpt_t>& perimeter);
@@ -124,6 +139,11 @@ public:
   double renyiEntopy(mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& predicted_scans);
 
   void getProbabilityMaps(const mapping::ProbabilityMap& probabilityMap,spblTrajectory& trajectory,LaserScanList& measurements,ProbabilityMaps& probability_maps);
+
+  //Visualization stuff
+  void MarkerConfig(visualization_msgs::Marker& marker,gtsam::Pose2& pose2,int& id);
+  void addToMarkerArray(visualization_msgs::MarkerArray& marker_array,gtsam::Pose2& pose2);
+
 
   ~AslamBase();
 };

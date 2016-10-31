@@ -201,7 +201,9 @@ public:
 	void createLaserFactors();
 	void slamHandler();
 	void navigationHandler();
-	void doAslamStuff(nav_msgs::OccupancyGrid&);
+	void doAslamStuff(mapping::ProbabilityMap& map);
+	void tfInit();
+
 
 	std::mutex slam_mutex;
 	std::condition_variable slam_cv;
@@ -210,6 +212,7 @@ public:
 	std::thread laser_factor_thread_;
 	std::thread slam_thread_;
 	std::thread navigation_thread_;
+	std::shared_ptr<std::thread> tf_init_thread_;
 
 
 };

@@ -47,6 +47,8 @@ public:
 	 */
 	~ProbabilityMap();
 
+	void reset(const ProbabilityMap&  map);
+
 	void setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_grid);
 
 	/**

@@ -45,12 +45,30 @@ std::ostream& operator<< (std::ostream& stream, const ProbabilityMap& map) {
 }
 
 
+void ProbabilityMap::reset(const ProbabilityMap&  map) {
+  ROS_INFO_STREAM("Reset Entered"<<map.origin_);
+
+  origin_ = map.origin();
+  ROS_INFO_STREAM("Origin"<<origin_);
+  cell_size_ = map.cell_size_;
+  ROS_INFO_STREAM("Cell Size"<<cell_size_);
+
+  data_ = gtsam::Matrix::Zero(map.rows(),map.cols());
+  for(size_t row = 0;row < map.rows();row++)
+    for(size_t col = 0;col < map.cols();col++) {
+      data_(row,col) = ProbabilityToLogOdds(map.at(row,col));
+    }
+  ROS_INFO_STREAM("Data OK"<<data_.rows()<<data_.cols());
+
+}
+
+
 void ProbabilityMap::setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_grid) {
   origin_ = gtsam::Point2(occupancy_grid.info.origin.position.x,occupancy_grid.info.origin.position.y);
   cell_size_ = occupancy_grid.info.resolution;
   data_ = gtsam::Matrix::Zero(occupancy_grid.info.height,occupancy_grid.info.width);
-  for(size_t row = 0;row < rows();row++)
-    for(size_t col = 0;col < cols();col++) {
+  for(size_t row = 0;row < occupancy_grid.info.height;row++)
+    for(size_t col = 0;col < occupancy_grid.info.width;col++) {
       data_(row,col) = ProbabilityToLogOdds((255.0 - (double)(occupancy_grid.data[row*cols() + col]))/255.0);
     }
 }
@@ -408,6 +426,7 @@ void ProbabilityMap::occupancyGrid(nav_msgs::OccupancyGrid& occupancy_msg) {
 	occupancy_msg.info.height = rows();
 	occupancy_msg.info.width = cols();
 	occupancy_msg.info.resolution = cell_size_;
+	//@todo: Figure out the correct origin
 	occupancy_msg.info.origin.position.x = origin_.x();
 	occupancy_msg.info.origin.position.y = origin_.y();
 	occupancy_msg.info.origin.position.z =  0.0;

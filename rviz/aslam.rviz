@@ -6,6 +6,8 @@ Panels:
       Expanded:
         - /TF1/Tree1
         - /Map1
+        - /MarkerArray1
+        - /MarkerArray1/Namespaces1
       Splitter Ratio: 0.5
     Tree Height: 811
   - Class: rviz/Selection
@@ -246,8 +248,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: -9999
-        Min Value: 9999
+        Max Value: 0.2972
+        Min Value: 0.2972
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -439,6 +441,14 @@ Visualization Manager:
       Topic: /curr_map
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /visualization_marker
+      Name: MarkerArray
+      Namespaces:
+        aslam: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -458,7 +468,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 18.6441
+      Distance: 13.428
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1

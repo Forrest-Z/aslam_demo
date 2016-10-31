@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   laser_geometry
   dwa_local_planner
   costmap_2d
+  visualization_msgs
 )
 
 find_package(GTSAM REQUIRED)
@@ -123,7 +124,7 @@ pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES aslam_demo
-  CATKIN_DEPENDS geometry_msgs gtsam_ros pcl_ros roscpp rospy std_msgs nav_msgs sensor_msgs csm_ros laser_geometry dwa_local_planner costmap_2d
+  CATKIN_DEPENDS geometry_msgs gtsam_ros pcl_ros roscpp rospy std_msgs nav_msgs sensor_msgs csm_ros laser_geometry dwa_local_planner costmap_2d  visualization_msgs
   DEPENDS system_lib sbpl GTSAM CSM YAML_CPP
 )
 

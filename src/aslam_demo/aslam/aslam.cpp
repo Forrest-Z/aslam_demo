@@ -5,17 +5,82 @@
 namespace aslam {
 AslamBase::AslamBase(ros::NodeHandle& n):
 n_(n),
-tf_listener_(ros::Duration(100)),
+probability_map_(1,1,1,gtsam::Point2(0.0,0.0)),
+occupancy_grid_(),
 costmap2dros_("costmap",tf_listener_),
+tf_listener_(ros::Duration(10000)),
 local_planner_(std::make_shared<dwa_local_planner::DWAPlannerROS>()),
-alpha_(1.0) {
+current_pose_(gtsam::Pose2(100.0,100.0,0.0)),
+alpha_(1.0),
+MotPrimFilename_("/home/sriramana/sbpl/matlab/mprim/pr2.mprim") {
+
   ROS_INFO_STREAM("A");
-
-
   local_planner_->initialize("local",&tf_listener_,&costmap2dros_);
-  velocity_publisher_  = n_.advertise<geometry_msgs::Twist>("command",1);
-  probability_map_ = mapping::ProbabilityMap(occupancy_grid_);
+  velocity_publisher_  = n_.advertise<geometry_msgs::Twist>("cmd_vel",1);
+  vis_publisher = n_.advertise<visualization_msgs::MarkerArray>( "visualization_marker", 0 );
+  ROS_INFO_STREAM("Costmap"<<(int)costmap2dros_.getCostmap()->getCharMap()[200]);
+
 }
+
+void AslamBase::updateFromOccMap(nav_msgs::OccupancyGrid& occupancy_grid,gtsam::Pose2 current_pose) {
+  ROS_INFO_STREAM("Entered");
+  occupancy_grid_  = occupancy_grid;
+  ROS_INFO_STREAM("Occupancy grid updated");
+
+  probability_map_ = mapping::ProbabilityMap(occupancy_grid);
+  ROS_INFO_STREAM("Occupancy probabMap Updated");
+
+  mainAslamAlgorithm();
+}
+
+
+void AslamBase::updateFromProbMap(mapping::ProbabilityMap& probability_map,gtsam::Pose2 current_pose) {
+  ROS_INFO_STREAM("Entered OOO");
+
+  probability_map_.reset(probability_map);
+  ROS_INFO_STREAM("Occupancy grid updated");
+
+  probability_map_.occupancyGrid(occupancy_grid_);
+  ROS_INFO_STREAM("Occupancy probabMap Updated");
+  gtsam::Point2 world_point(current_pose.x(),current_pose.y());
+  gtsam::Point2 map_point = probability_map_.fromWorld(world_point);
+  current_pose_ = gtsam::Pose2(map_point.x()*probability_map_.cellSize(),map_point.y()*probability_map_.cellSize(),current_pose.theta());
+
+  mainAslamAlgorithm();
+}
+
+
+void AslamBase::MarkerConfig(visualization_msgs::Marker& marker,gtsam::Pose2& pose,int& id) {
+  marker.header.frame_id = "base_link";
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "aslam";
+  marker.id = id;
+  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = pose.x();
+  marker.pose.position.y = pose.y();
+  marker.pose.position.z = 0.0;
+  tf::Quaternion q;
+  q.setEuler(pose.theta(),0.0,0.0);
+  tf::quaternionTFToMsg(q,marker.pose.orientation);
+
+  marker.scale.x = 0.01;
+  marker.scale.y = 0.01;
+  marker.scale.z = 0.01;
+  marker.color.a = 1.0; // Don't forget to set the alpha!
+  marker.color.r = 0.0;
+  marker.color.g = 1.0;
+  marker.color.b = 0.0;
+}
+
+
+void AslamBase::addToMarkerArray(visualization_msgs::MarkerArray& marker_array,gtsam::Pose2& pose2) {
+  visualization_msgs::Marker marker;
+  int id = marker_array.markers.size();
+  MarkerConfig(marker,pose2,id);
+  marker_array.markers.push_back(marker);
+}
+
 
 void AslamBase::driveRobot(rosTrajectory& trajectory) {
   //@todo: figure out where this comes from
@@ -32,24 +97,37 @@ void AslamBase::driveRobot(rosTrajectory& trajectory) {
 }
 
 void AslamBase::mainAslamAlgorithm() {
+  ROS_INFO_STREAM("main Aslam entered");
   vectorOfIndices frontier_indices,cluster_centers;
-  gtsam::Pose2 current_pose_;
   getFrontierCells(occupancy_grid_,frontier_indices);
+  ROS_INFO_STREAM("main Aslam entered");
+  for(auto const iter:frontier_indices) {
+    gtsam::Pose2 pose(iter.first*probability_map_.cellSize(),iter.second*probability_map_.cellSize(),0.0);
+    addToMarkerArray(marker_array_,pose);
+  }
+  ROS_INFO_STREAM("Marker Array"<<marker_array_.markers.size());
+  vis_publisher.publish(marker_array_);
   findFrontierClusters(frontier_indices,cluster_centers);
+  ROS_INFO_STREAM("main Aslam entered"<<MotPrimFilename_);
 
+  setSPBLEnvfromOccupancyGrid(env_,occupancy_grid_,MotPrimFilename_);
   spblTrajectoryList trajectory_list;
   for(auto const &iter: cluster_centers) {
+    ROS_INFO_STREAM("Cluster Centers");
+
     spblTrajectory trajectory;
-    gtsam::Pose2 goal(iter.first,iter.second,0.0); //@todo get good estimate of orientation
+    gtsam::Pose2 goal(iter.first*probability_map_.cellSize(),iter.second*probability_map_.cellSize(),0.0); //@todo get good estimate of orientation
+    ROS_INFO_STREAM("Coordinates"<<iter.first<<"\t"<<iter.second<<"\t"<<current_pose_.x()<<"\t"<<current_pose_.y());
+
     planxythetalat(env_,current_pose_,goal,trajectory);
     trajectory_list.push_back(trajectory);
   }
-
-  spblTrajectory best_trajectory;
+  ROS_INFO_STREAM("Traj Length"<<trajectory_list.size());
+ /* spblTrajectory best_trajectory;
   selectTrajectory(probability_map_,trajectory_list,best_trajectory);
   rosTrajectory trajectory;
   fromSPBLtoROSpath(best_trajectory,trajectory);
-  driveRobot(trajectory);
+  driveRobot(trajectory); */
 
 
 }
@@ -179,12 +257,13 @@ void AslamBase::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter) {
 
 
 void AslamBase::setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_msgs::OccupancyGrid& occupancy_grid, char* MotPrimFilename) {
-  int height = occupancy_grid.info.height;
   int width = occupancy_grid.info.width;
+  int height = occupancy_grid.info.height;
   unsigned char mapdata[height*width];
   for(size_t i = 0;i < height*width;i++) {
-    char data = occupancy_grid.data[i];
-    if(data == -1 ) data = 50;
+    int data = occupancy_grid.data[i];
+   // size_t row_occ = i/occupancy_grid.info.width,col_occ = i%occupancy_grid.info.width;
+    if(data == -1 ) data = 127;
     mapdata[i] = (uchar)(data);
   }
   double startx = 0.0,starty = 0.0,starttheta = 0.0,goalx = 0.0,goaly = 0.0,goaltheta = 0.0;
@@ -194,7 +273,9 @@ void AslamBase::setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_m
   double cellsize_m = occupancy_grid.info.resolution;
   double nominalvel_mpersecs = 0.1;
   double timetoturn45degsinplace_secs = 0.1;
-  unsigned char obsthresh = 0.5;
+  unsigned char obsthresh = 100;
+  FILE* fMotPrim = fopen(MotPrimFilename, "r");
+  if(fMotPrim == NULL) ROS_INFO("This is it");
   env.InitializeEnv(width,height,mapdata,startx,starty,starttheta,goalx,goaly,goaltheta,goaltol_x,goaltol_y,goaltol_theta,perimeterptsV,cellsize_m,nominalvel_mpersecs,timetoturn45degsinplace_secs,obsthresh,MotPrimFilename);
 }
 
@@ -202,7 +283,7 @@ void initializePlanner(std::shared_ptr<SBPLPlanner>& planner,
                        EnvironmentNAVXYTHETALAT& env,
                        int start_id, int goal_id,
                        double initialEpsilon,
-                       bool bsearchuntilfirstsolution){
+                       bool bsearchuntilfirstsolution) {
     // work this out later, what is bforwardsearch?
     bool bsearch = false;
     planner = std::make_shared<ARAPlanner>(&env, bsearch);
@@ -316,6 +397,7 @@ void AslamBase::fromSPBLtoROSpath(std::vector<sbpl_xy_theta_pt_t> &xythetaPath, 
 
 
 void AslamBase::getFrontierCells(nav_msgs::OccupancyGrid& occupancy_grid,std::vector<std::pair<int,int> >& frontier_indices) {
+  ROS_INFO_STREAM("Frontier Cells Entered");
 
   size_t height = occupancy_grid.info.height;
   size_t width = occupancy_grid.info.width;
@@ -353,9 +435,10 @@ void AslamBase::getFrontierCells(nav_msgs::OccupancyGrid& occupancy_grid,std::ve
 }
 
 void AslamBase::findFrontierClusters(vectorOfIndices& frontier_indices,vectorOfIndices& cluster_centers) {
+  ROS_INFO_STREAM("Frontier Clusters Entered");
   int numPoints = frontier_indices.size();
   cv::Mat points(numPoints,2,CV_32FC1),labels,centers;
-  int cluster_count = 10;
+  int cluster_count = 2;
   int index = 0;
   for(auto const iter: frontier_indices) {
     points.at<float>(index,0) = (float)(iter.first);
