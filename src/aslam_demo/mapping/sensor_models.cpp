@@ -295,7 +295,6 @@ void LaserScanModel::updateMap(ProbabilityMap& map, const gtsam::Point2& sensor_
       double cdf2 = 0.5 + 0.5*erf(x2 / C3);
       likelihood += (cdf2 - cdf1);
     }
-
     // Update the map with the probability
     map.update(line[i].row, line[i].col, 0.5 + 0.5*likelihood);
   }
@@ -311,6 +310,7 @@ void LaserScanModel::updateMap(ProbabilityMap& map, const sensor_msgs::LaserScan
   sensor_msgs::PointCloud cloud;
   projector.projectLaser(scan, cloud);
 
+
   // Transform the laser frame points into the world frame
   std::vector<gtsam::Point2> range_points;
   range_points.reserve(cloud.points.size());
@@ -321,7 +321,6 @@ void LaserScanModel::updateMap(ProbabilityMap& map, const sensor_msgs::LaserScan
     gtsam::Point3 world_P_range = world_T_laser * laser_P_range;
     range_points.push_back(gtsam::Point2(world_P_range.x(), world_P_range.y()));
   }
-
   // Update the map
   for(size_t i = 0; i < range_points.size(); ++i) {
     // Call the per-point function version

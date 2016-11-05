@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(aslam_demo)
-catkin_make -DCMAKE_BUILD_TYPE=Debug
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -16,7 +16,9 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   laser_geometry
-
+  dwa_local_planner
+  costmap_2d
+  visualization_msgs
 )
 
 find_package(GTSAM REQUIRED)
@@ -122,7 +124,7 @@ pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES aslam_demo
-  CATKIN_DEPENDS geometry_msgs gtsam_ros pcl_ros roscpp rospy std_msgs nav_msgs sensor_msgs csm_ros laser_geometry
+  CATKIN_DEPENDS geometry_msgs gtsam_ros pcl_ros roscpp rospy std_msgs nav_msgs sensor_msgs csm_ros laser_geometry dwa_local_planner costmap_2d   visualization_msgs
   DEPENDS system_lib sbpl GTSAM CSM YAML_CPP
 )
 
@@ -162,6 +164,7 @@ add_library(aslam_demo
   include/aslam_demo/mapping/laserscan_processing.h
   include/aslam_demo/mapping/csm_processing.h
   include/aslam_demo/mapping/odometry_processing.h
+  include/aslam_demo/aslam/aslam.h
   
   src/aslam_demo/mapping/mapping_common.cpp
   src/aslam_demo/mapping/optimization_processing.cpp
@@ -177,6 +180,7 @@ add_library(aslam_demo
   src/aslam_demo/mapping/csm_processing.cpp
   src/aslam_demo/aslam_demo.cpp
   src/aslam_demo/mapping/odometry_processing.cpp 
+  src/aslam_demo/aslam/aslam.cpp
 
 )
 

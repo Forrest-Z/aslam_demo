@@ -2,12 +2,15 @@
 
 namespace aslam_demo {
 
-AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_generator_(time_tolerance),isactive_slam_thread_(true) {
+AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_generator_(time_tolerance),isactive_slam_thread_(true),current_pose_(gtsam::Pose2(0.0,0.0,0.0)),base_name_("base_footprint") {
   ROS_INFO_STREAM("A");
 
   ROS_INFO_STREAM("Transform Sent");
+  map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("curr_map",1);
+  pose_pub_ = n_.advertise<geometry_msgs::Pose2D>("curr_pose",1);
+  command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
   tf_init_thread_ = std::make_shared<std::thread>(boost::bind(&AslamDemo::tfInit,this));
-  aslam_ = std::make_shared<aslam::AslamBase>(n);
+  aslam_ = std::make_shared<aslam::AslamBase>(n,base_name_);
 
 	laser_sub_ = n_.subscribe<sensor_msgs::LaserScan>("/scan",1000000,boost::bind(&AslamDemo::scanCallback,this,_1));
 	odometry_sub_ = n_.subscribe<nav_msgs::Odometry>("/odom",1000,boost::bind(&AslamDemo::odomCallback,this,_1));
@@ -18,7 +21,7 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
 	tf::StampedTransform stamped_transform;
 	tf::Transform transform;
 	try {
-		tf_listener_.lookupTransform("/base_link", "/laser_link",
+		tf_listener_.lookupTransform(base_name_, "/laser_link",
 	                               ros::Time(0), stamped_transform);
 		transform = stamped_transform;
 		fromTftoGtsamPose(base_T_laser_,transform);
@@ -31,10 +34,6 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
 
 	current_pose_ = gtsam::Pose2(0.0,0.0,0.0);
 	transform.setIdentity();
-	map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("map",1);
-	pose_pub_ = n_.advertise<geometry_msgs::Pose2D>("curr_pose",1);
-	command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
-	ROS_INFO_STREAM("C");
 
   map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
   model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
@@ -48,10 +47,16 @@ void AslamDemo::getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap
 }
 
 void AslamDemo::tfInit() {
-  int wait = 100000;
-    while(--wait) {
-    tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now(), "/base_link","/map" ));
-    tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now()+ros::Duration(5.0), "/base_link","/map" ));
+ // int wait = 100000;
+    while(1) {
+    if(!tflistflag_) continue;
+    tf::Transform transform;
+    fromGtsamPose2toTf(current_pose_,transform);
+    tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(), base_name_,"/map" ));
+  //  ROS_INFO_STREAM("Cell"<<current_map_publishable_.info.resolution);
+    map_pub_.publish(current_map_publishable_);
+
+   // tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now()+ros::Duration(5.0), "/base_link","/map" ));
 
    }
 
@@ -217,11 +222,14 @@ gtsam::Pose2 AslamDemo::extractLatestPose(const gtsam::Values& values) {
 }
 
 void AslamDemo::fromGtsamPose2toTf(const gtsam::Pose2 &pose2, tf::Transform &transform) {
+
 	tf::Vector3 translation(pose2.x(),pose2.y(),0);
 	tf::Matrix3x3 rotation;
 	rotation.setRPY(0.0,0.0,pose2.theta());
+
 	transform.setOrigin(translation);
 	transform.setBasis(rotation);
+
 }
 
 void AslamDemo::updateKDTree(const gtsam::Values& values) {
@@ -370,23 +378,29 @@ void AslamDemo::slam() {
 			prob_map_ = mapping::map::createEmptyMap(pose_estimates,.025,15.0);
 			map_initialized_ = true;
 	}
+  std::string filename = "currmap";
 
-	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,"curr_map");
+	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,filename);
 
 	ROS_INFO_STREAM("Map Initialized");
 	ROS_INFO_STREAM("Map Formed!!");
 
-	std::string filename = "currmap";
-
 	prob_map_.occupancyGrid(current_map_);
+
+	prob_map_.getPublishableMap(current_map_,current_map_publishable_);
+ // mapping::map::writeMap(filename,current_map_publishable_,0.2,0.8);
+	prob_map_.occupancyGrid(filename);
+	tflistflag_ = true;
 	//prob_map_.print("Prob Map");
 	tf::Transform transform;
 	fromGtsamPose2toTf(current_pose_,transform);
-	tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(), "base_link","map" ));
+	tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(),base_name_,"map" ));
+ // tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base_link","map" ));
+
 
 	ROS_INFO_STREAM("Map Formed"<<prob_map_.origin());
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);
-	map_pub_.publish(current_map_);
+	map_pub_.publish(current_map_publishable_);
 	doAslamStuff(prob_map_);
 //	pose_estimates_.insert(pose_estimates);
 	factor_graph_.push_back(factor_graph);

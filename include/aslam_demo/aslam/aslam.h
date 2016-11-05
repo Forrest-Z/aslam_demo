@@ -80,34 +80,43 @@ class AslamBase {
 
 public:
 
-  AslamBase(ros::NodeHandle& n);
+  AslamBase(ros::NodeHandle& n,std::string base_name);
   ros::NodeHandle n_;
   tf::TransformListener tf_listener_;
 
   costmap_2d::Costmap2DROS costmap2dros_;
 
+  std::string base_name_;
   nav_msgs::OccupancyGrid occupancy_grid_;
   mapping::ProbabilityMap probability_map_;
   EnvironmentNAVXYTHETALAT env_;
   std::shared_ptr<SBPLPlanner> planner_;
-  std::shared_ptr<dwa_local_planner::DWAPlannerROS> local_planner_;
+  dwa_local_planner::DWAPlannerROS local_planner_;
+  //std::shared_ptr<dwa_local_planner::DWAPlannerROS> local_planner_;
   spblTrajectory spbl_global_path_;
   rosTrajectory ros_global_path_;
   char* MotPrimFilename_;
   gtsam::Pose2 current_pose_;
+  bool planner_init_ = false;
 
+
+  gtsam::Pose3 base_T_laser_;
   ros::Publisher velocity_publisher_;
   ros::Publisher vis_publisher;
   visualization_msgs::MarkerArray marker_array_;
   //All interface stuff
   void updateFromProbMap(mapping::ProbabilityMap& probability_map,gtsam::Pose2 current_pose);
   void updateFromOccMap(nav_msgs::OccupancyGrid& occupancy_grid,gtsam::Pose2 current_pose);
+  void fromTftoGtsamPose(gtsam::Pose3 &pose3, const tf::Transform &transform);
+  void fromGtsamPose2toROS(gtsam::Pose2& pose2,geometry_msgs::Pose& pose);
+
 
 
   //spbl stuff
   void createFootprint(std::vector<sbpl_2Dpt_t>& perimeter);
   void setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_msgs::OccupancyGrid& occupancy_grid,char* motPrimFilename) ;
-  void planxythetalat(EnvironmentNAVXYTHETALAT& env,gtsam::Pose2& start,gtsam::Pose2& goal,std::vector<sbpl_xy_theta_pt_t> &xythetaPath);
+  void planxythetalat(EnvironmentNAVXYTHETALAT& env,gtsam::Pose2& start,gtsam::Pose2& goal,std::vector<sbpl_xy_theta_pt_t> &xythetaPath,std::vector<int>& solution_stateIDs,bool initialized);
+  void initPlanner(std::shared_ptr<SBPLPlanner>& planner,EnvironmentNAVXYTHETALAT& env) ;
 
 
   //All Navigation stuff
@@ -129,7 +138,7 @@ public:
 
 
   double utilityOfTrajectory(mapping::ProbabilityMap& probability_map, spblTrajectory &trajectory);
-  void selectTrajectory(mapping::ProbabilityMap& probability_map, spblTrajectoryList &trajectoryList,spblTrajectory best_trajectory);
+  void selectTrajectory(mapping::ProbabilityMap& probability_map, spblTrajectoryList &trajectoryList,spblTrajectory& best_trajectory);
 
 
 
@@ -143,7 +152,7 @@ public:
   //Visualization stuff
   void MarkerConfig(visualization_msgs::Marker& marker,gtsam::Pose2& pose2,int& id);
   void addToMarkerArray(visualization_msgs::MarkerArray& marker_array,gtsam::Pose2& pose2);
-
+  void plotsbplTrajectory(spblTrajectory& trajectory);
 
   ~AslamBase();
 };

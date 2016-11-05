@@ -1,14 +1,16 @@
 global_frame: map
-robot_base_frame: base_link
-publish_frequency: 0.0
-transform_tolerance: 1000
+robot_base_frame: base_footprint
+publish_frequency: 5.0
+transform_tolerance: 1000000
 footprint: [[-0.325, -0.325], [-0.325, 0.325], [0.325, 0.325], [0.46, 0.0], [0.325, -0.325]]
-update_frequency: 0.0
+update_frequency: 5.0
+odom_topic: odom
 rolling_window: false
+static_map: true
 plugins: 
     - {name: static_map,       type: "costmap_2d::StaticLayer"}
 
 static_map:
     unknown_cost_value: -1
     lethal_cost_threshold: 100
-    map_topic: map  
+    map_topic: "map"  

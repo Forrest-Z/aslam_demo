@@ -14,16 +14,22 @@ const double ProbabilityMap::MAX_LOG_ODDS = 50.0;
 
 /* ************************************************************************* */
 ProbabilityMap::ProbabilityMap(size_t rows, size_t cols, double cell_size, const gtsam::Point2& origin)
-	: data_(gtsam::Matrix::Zero(rows, cols)), origin_(origin), cell_size_(cell_size) {
+	: data_(gtsam::Matrix::Zero(rows, cols)), origin_(origin), cell_size_(cell_size),shannon_entropy_(0.0) {
 }
 
 ProbabilityMap::ProbabilityMap(nav_msgs::OccupancyGrid& occupancy_grid) {
   setfromOccupancyGrid(occupancy_grid);
+  this->calcShannonEntropy();
 }
 
 /* ************************************************************************* */
 ProbabilityMap::~ProbabilityMap() {
 }
+
+ProbabilityMap::ProbabilityMap(const ProbabilityMap& map) {
+  this->reset(map);
+}
+
 
 /* ************************************************************************* */
 std::ostream& operator<< (std::ostream& stream, const ProbabilityMap& map) {
@@ -46,19 +52,17 @@ std::ostream& operator<< (std::ostream& stream, const ProbabilityMap& map) {
 
 
 void ProbabilityMap::reset(const ProbabilityMap&  map) {
-  ROS_INFO_STREAM("Reset Entered"<<map.origin_);
 
   origin_ = map.origin();
-  ROS_INFO_STREAM("Origin"<<origin_);
   cell_size_ = map.cell_size_;
-  ROS_INFO_STREAM("Cell Size"<<cell_size_);
 
   data_ = gtsam::Matrix::Zero(map.rows(),map.cols());
   for(size_t row = 0;row < map.rows();row++)
     for(size_t col = 0;col < map.cols();col++) {
       data_(row,col) = ProbabilityToLogOdds(map.at(row,col));
     }
-  ROS_INFO_STREAM("Data OK"<<data_.rows()<<data_.cols());
+  this->calcShannonEntropy();
+
 
 }
 
@@ -73,6 +77,12 @@ void ProbabilityMap::setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_gri
     }
 }
 
+void ProbabilityMap::getPublishableMap(const nav_msgs::OccupancyGrid& input,nav_msgs::OccupancyGrid& output) {
+  output = input;
+  for(size_t i = 0;i < input.info.height*input.info.width;i++) {
+    output.data[i] = ((double)input.data[i]/255.0)*100;
+  }
+}
 /* ************************************************************************* */
 void ProbabilityMap::print(const std::string& name) const {
 	// Implement print using the stream operator
@@ -385,12 +395,27 @@ std::vector<ProbabilityMap::LineCell> ProbabilityMap::line(const gtsam::Point2& 
 //  return cells;
 //}
 
+void ProbabilityMap::calcShannonEntropy() {
+  double entropy = 0.0;
+  for(size_t row = 0;row < rows();row++)
+    for(size_t col = 0;col < cols(); col++) {
+      double probability = this->at(row,col);
+      entropy += probability*log(probability) + (1 - probability)*log(1 - probability);
+    }
+  shannon_entropy_ = -entropy;
+}
+
+
 /* ************************************************************************* */
 void ProbabilityMap::update(int row, int col, double probability) {
   // Bounds check
   if(!inside(row,col)) throw std::runtime_error("Requested map coordinates ("
       + boost::lexical_cast<std::string>(row) + "," + boost::lexical_cast<std::string>(col)
       + ") is not within the map bounds.");
+
+  double old_probability = this->at(row,col);
+  shannon_entropy_ += old_probability*log(old_probability) + (1 - old_probability)*log(1 - old_probability);
+  shannon_entropy_ -= probability*log(probability) + (1 - probability)*log(1 - probability);
 
   // Increment the log-odds entry by the provided probability value
   data_(row,col) += ProbabilityToLogOdds(probability);

@@ -6,11 +6,13 @@
 #define PROBABILITY_MAP_H
 
 #include <gtsam/geometry/Point2.h>
+#include <gtsam/geometry/Pose2.h>
 #include <gtsam/base/Matrix.h>
 #include <boost/shared_ptr.hpp>
 #include <nav_msgs/OccupancyGrid.h>
 #include <ros/ros.h>
 #include <ros/rostime_decl.h>
+#include <sbpl/headers.h>
 
 
 namespace mapping {
@@ -24,7 +26,6 @@ namespace mapping {
  */
 class ProbabilityMap {
 public:
-
 	/**
 	 * Convenience typedef for shared pointer to this object
 	 */
@@ -41,6 +42,8 @@ public:
 			const gtsam::Point2& origin = gtsam::Point2(0.0, 0.0));
 
 	ProbabilityMap(nav_msgs::OccupancyGrid& occupancy_grid);
+  ProbabilityMap(const ProbabilityMap& map);
+
 
 	/**
 	 * Destructor
@@ -132,6 +135,26 @@ public:
    */
   gtsam::Point2 fromWorld(const gtsam::Point2& world_coordinates) const;
 
+  gtsam::Pose2 toSBPL(gtsam::Pose2& pose) {
+    return(gtsam::Pose2(pose.x() - origin_.x(),pose.y() - origin_.y(),pose.theta() - 0.0));
+  }
+
+  gtsam::Point2 toSBPL(gtsam::Point2& point2) {
+      return(point2 - origin_);
+  }
+
+
+  gtsam::Point2 fromSBPL(gtsam::Point2& point2) const{
+      return(point2 + origin_);
+  }
+
+  gtsam::Pose2 fromSBPL(const gtsam::Pose2& pose) const{
+    return(gtsam::Pose2(pose.x() + origin_.x(),pose.y() + origin_.y(),pose.theta() + 0.0));
+  }
+
+  gtsam::Pose2 fromSBPL(const sbpl_xy_theta_pt_t& pose) const{
+      return(gtsam::Pose2(pose.x + origin_.x(),pose.y + origin_.y(),pose.theta + 0.0));
+   }
   /**
    * Test if a (row, col) pair is inside the map area
    * @param row
@@ -273,12 +296,22 @@ public:
 
   void occupancyGrid(nav_msgs::OccupancyGrid& occupancy_msg) ;
 
+  void getPublishableMap(const nav_msgs::OccupancyGrid& input,nav_msgs::OccupancyGrid& output);
+
+
 
   /**
    * Blur/smooth the map values
    * @param sigma
    */
   void smooth(double sigma);
+
+
+  double getShannonEntropy() const {
+    ROS_INFO_STREAM("Shannon Entropy"<<shannon_entropy_);
+
+    return shannon_entropy_;
+  }
 
 protected:
 
@@ -296,6 +329,10 @@ protected:
    * The size of each map cell/pixel in meters
    */
   double cell_size_;
+
+  double shannon_entropy_;
+
+  void calcShannonEntropy();
 
 	/**
 	 * Maximum allowable log-odds magnitude to be stored in the map. Larger values

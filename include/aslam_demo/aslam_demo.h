@@ -124,10 +124,12 @@ private:
   void updateKDTree(const gtsam::Values& );
   void searchForLoopClosure(gtsam::NonlinearFactorGraph& ,gtsam::Values& );
   void doScanMatch(sensor_msgs::LaserScan&,sensor_msgs::LaserScan&,mapping::RelativePoseEstimates& );
-
+  bool tflistflag_ = true;
   std::shared_ptr<aslam::AslamBase> aslam_;
 	ros::NodeHandle n_;
 
+
+	std::string base_name_;
 	laser_geometry::LaserProjection laser_projection_;
 	tf::TransformListener tf_listener_;
 	tf::TransformBroadcaster tf_broadcaster_;
@@ -135,9 +137,8 @@ private:
 	sensor_msgs::LaserScan laser_scan_;
 	geometry_msgs::Twist robot_command_;
 	nav_msgs::Odometry odometry_;
-	nav_msgs::OccupancyGrid current_map_;
+	nav_msgs::OccupancyGrid current_map_,current_map_publishable_;
   mapping::ProbabilityMap prob_map_;
-  gtsam::Pose3 base_T_laser_;
   gtsam::Pose2 current_pose_;
 
 
@@ -177,8 +178,6 @@ private:
   gtsam::Pose2 getRelativeOdom(nav_msgs::Odometry &,nav_msgs::Odometry &);
   nav_msgs::Odometry getCorrespondingOdom(const ros::Time &,mapping::Odometry&);
   nav_msgs::OccupancyGrid fromGtsamMatrixToROS(gtsam::Matrix &);
-  void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
-  void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
 
   void createZeroInitialGuess();
   void connectWithOdometry(gtsam::NonlinearFactorGraph&,gtsam::Values&);
@@ -204,6 +203,10 @@ public:
 	void doAslamStuff(mapping::ProbabilityMap& map);
 	void tfInit();
 
+  void fromTftoGtsamPose(gtsam::Pose3 &, const tf::Transform &);
+  void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
+
+
 
 	std::mutex slam_mutex;
 	std::condition_variable slam_cv;
@@ -213,6 +216,9 @@ public:
 	std::thread slam_thread_;
 	std::thread navigation_thread_;
 	std::shared_ptr<std::thread> tf_init_thread_;
+
+  gtsam::Pose3 base_T_laser_;
+
 
 
 };
