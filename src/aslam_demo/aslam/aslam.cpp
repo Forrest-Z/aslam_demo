@@ -3,7 +3,7 @@
 #include <opencv2/core/core.hpp>
 
 namespace aslam {
-AslamBase::AslamBase(ros::NodeHandle& n,std::string base_name):
+AslamBase::AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link):
 n_(n),
 probability_map_(1,1,1,gtsam::Point2(0.0,0.0)),
 occupancy_grid_(),
@@ -13,7 +13,8 @@ tf_listener_(ros::Duration(1000000)),
 current_pose_(gtsam::Pose2(100.0,100.0,0.0)),
 alpha_(1.0),
 MotPrimFilename_("/home/sriramana/sbpl/matlab/mprim/pr2.mprim"),
-base_name_(base_name){
+base_name_(base_name),
+laser_link_(laser_link) {
 
   ROS_INFO_STREAM("A");
  // local_planner_->initialize("local",&tf_listener_,&costmap2dros_);
@@ -23,7 +24,7 @@ base_name_(base_name){
   tf::StampedTransform ts;
   tf::Transform tr;
   try {
-      tf_listener_.lookupTransform(base_name_, "/laser_link",
+      tf_listener_.lookupTransform(base_name_,laser_link_,
                                    ros::Time(0), ts);
       tr = ts;
       fromTftoGtsamPose(base_T_laser_,tr);
@@ -33,6 +34,7 @@ base_name_(base_name){
       ros::Duration(1.0).sleep();
    }
   costmap2dros_.start();
+  initialized_ = true;
 }
 
 
@@ -137,31 +139,33 @@ void AslamBase::driveRobot(rosTrajectory& trajectory) {
     ROS_INFO_STREAM("SS"<<a[1]);
 
     ROS_INFO_STREAM("SS"<<a.size()<<costmap2dros_.getCostmap()->getCharMap()[1000]);
-    tf::Transform tf;
+    tf::Pose tf_pose;
     geometry_msgs::Pose pose_geo;
-    fromGtsamPose2toTf(current_pose_,tf);
+    fromGtsamPose2toTfPose(current_pose_,tf_pose);
     costmap_2d::Costmap2D *costmap = costmap2dros_.getLayeredCostmap()->getCostmap();
-    for(size_t i=0;i<100000;i++) {
-  //    ROS_INFO_STREAM("ss"<<costmap2dros_.getLayeredCostmap()->isInitialized()<<"\t"<<(int)costmap->getCharMap()[i]<<"\t"<<costmap->getOriginX()<<"\t"<<costmap->getOriginY()<<"\t"<<costmap->getResolution()<<"\t"<<costmap->getSizeInCellsX()<<"\t"<<costmap->getSizeInCellsY()<<"\t"<<costmap->getSizeInMetersX()<<"\t"<<costmap->getSizeInMetersY());
-    }
-    tf::Stamped<tf::Transform> pose(tf,ros::Time::now() - ros::Duration(5.0),base_name_);
 
-    tf::Transform tf_pose_print;
+  //  tf::Stamped<tf::Pose> pose(tf_pose,ros::Time::now() - ros::Duration(5.0),base_name_);
+    tf::Stamped<tf::Pose> pose;
     costmap2dros_.getRobotPose(pose);
-    ROS_INFO_STREAM("cmd_vel"<<costmap2dros_.getBaseFrameID()<<"\t"<<costmap2dros_.getGlobalFrameID()<<"\t"<<pose.getOrigin().x()<<"\t"<<pose.getOrigin().y()<<"\t"<<pose.getOrigin().x()<<"\t"<<pose.getOrigin().y());
-     bool success = local_planner_.computeVelocityCommands(cmd_vel);
+    ROS_INFO_STREAM("SS\t("<<pose.getOrigin().x()<<","<<pose.getOrigin().y()<<")\t"<<trajectory[0].header.stamp);
 
-  //  geometry_msgs::PoseStamped ps;
-  //  ps.header.stamp = ros::Time::now() - ros::Duration(5.0);
+    while(1) {
+      bool success = local_planner_.computeVelocityCommands(cmd_vel);
+    }
 
-//    curr_ts.Transform(curr_pose);
 
-   // local_planner_.dwaComputeVelocityCommands(pose,cmd_vel);
-    while(1);
+  //  bool success = local_planner_.dwaComputeVelocityCommands(pose,cmd_vel);
    // if (success) velocity_publisher_.publish(cmd_vel);
 
 
   }
+}
+
+void AslamBase::fromGtsamPose2toTfPose(gtsam::Pose2& pose2,tf::Pose& tf_pose) {
+  tf_pose.setOrigin(tf::Vector3(pose2.x(),pose2.y(),0.0));
+  tf::Quaternion q;
+  q.setEuler(pose2.theta(),0.0,0.0);
+  tf_pose.setRotation(q);
 }
 
 void AslamBase::fromGtsamPose2toROS(gtsam::Pose2& pose2,geometry_msgs::Pose& pose) {
@@ -199,7 +203,7 @@ void AslamBase::mainAslamAlgorithm() {
     gtsam::Point2 world_point = probability_map_.toWorld(gtsam::Point2(iter.first,iter.second));
 
     //gtsam::Pose2 goal(world_point.x() - probability_map_.origin().x(),world_point.y() - probability_map_.origin().y(),0.0); //@todo get good estimate of orientation
-    gtsam::Pose2 goal(17.0,17.0,0); //@todo Inflate obstacles and remove invalid configuration
+    gtsam::Pose2 goal(15.5,15.0,0); //@todo Inflate obstacles and remove invalid configuration
     ROS_INFO_STREAM("Coordinates"<<iter.first<<"\t"<<iter.second<<"\t"<<current_pose_.x()<<"\t"<<current_pose_.y());
     std::vector<int> solution_stateIDs;
     planxythetalat(env,current_pose_,goal,trajectory,solution_stateIDs,planner_init_);
@@ -247,7 +251,7 @@ void AslamBase::predictedMeasurement(mapping::ProbabilityMap& probability_map,sp
     laser_scan.angle_min = angle_min;
     laser_scan.angle_max = angle_max;
     laser_scan.angle_increment = angle_increment;
-    laser_scan.header.frame_id = "laser_link";
+    laser_scan.header.frame_id = laser_link_;
     laser_scan.range_max = 3.5;
 
     gtsam::Point2 sbpl_point = gtsam::Point2(pose.x,pose.y);
@@ -389,7 +393,8 @@ void AslamBase::setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_m
     int data = occupancy_grid.data[i];
    // size_t row_occ = i/occupancy_grid.info.width,col_occ = i%occupancy_grid.info.width;
     if(data == -1 ) data = 127;
-    mapdata[i] = (uchar)(data);
+    if(data < 200) data = 0;
+    mapdata[i] = data;
   }
   double startx = 0.0,starty = 0.0,starttheta = 0.0,goalx = 0.0,goaly = 0.0,goaltheta = 0.0;
   double goaltol_x = 0.001,goaltol_y = 0.001,goaltol_theta = 0.001;
@@ -398,7 +403,7 @@ void AslamBase::setSPBLEnvfromOccupancyGrid(EnvironmentNAVXYTHETALAT& env, nav_m
   double cellsize_m = occupancy_grid.info.resolution;
   double nominalvel_mpersecs = 0.1;
   double timetoturn45degsinplace_secs = 0.1;
-  unsigned char obsthresh = 160;
+  unsigned char obsthresh = 200;
   FILE* fMotPrim = fopen(MotPrimFilename, "r");
   if(fMotPrim == NULL) ROS_INFO("This is it");
   env.InitializeEnv(width,height,mapdata,startx,starty,starttheta,goalx,goaly,goaltheta,goaltol_x,goaltol_y,goaltol_theta,perimeterptsV,cellsize_m,nominalvel_mpersecs,timetoturn45degsinplace_secs,obsthresh,MotPrimFilename);
@@ -484,12 +489,12 @@ void AslamBase::planxythetalat(EnvironmentNAVXYTHETALAT& env,gtsam::Pose2& start
 
 
 void AslamBase::fromSPBLtoROSpath(std::vector<sbpl_xy_theta_pt_t> &xythetaPath, std::vector< geometry_msgs::PoseStamped > &plan) {
-  int offset = 0;
+  int offset = 1;
   for(auto const &iter: xythetaPath) {
     gtsam::Pose2 pose = probability_map_.fromSBPL(iter);
 
     geometry_msgs::PoseStamped pose_stamped;
-    pose_stamped.header.stamp = ros::Time::now() + ros::Duration(offset);
+    pose_stamped.header.stamp = ros::Time::now() + ros::Duration(offset*10);
     pose_stamped.header.frame_id = "base_footprint";
     pose_stamped.pose.position.x = pose.x();
     pose_stamped.pose.position.y = pose.y();

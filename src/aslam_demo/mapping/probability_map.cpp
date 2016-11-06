@@ -461,7 +461,7 @@ void ProbabilityMap::occupancyGrid(nav_msgs::OccupancyGrid& occupancy_msg) {
 	int index = 0;
 	for(size_t row = 0; row < rows(); ++row) {
 	    for(size_t col = 0; col < cols(); ++col) {
-	      occupancy_msg.data[index++] = occupancy(row,col);
+	      occupancy_msg.data[row*cols() + col] = occupancy(row,col);
 	    }
 	}
 
@@ -488,15 +488,20 @@ void ProbabilityMap::occupancyGrid(const std::string& filename) const {
 
   // Write the header
   image << "P5" << std::endl; // PGM File Type
+//  image << boost::lexical_cast<std::string>(rows()) << " " << boost::lexical_cast<std::string>(cols()) << std::endl; // Width Height
   image << boost::lexical_cast<std::string>(cols()) << " " << boost::lexical_cast<std::string>(rows()) << std::endl; // Width Height
   image << "255" << std::endl; // Max Value
-
+  gtsam::Matrix occ_matrix = occupancy.transpose();
   // Now write the raw data
-  for(size_t row = 0; row < rows(); ++row) {
-    for(size_t col = 0; col < cols(); ++col) {
+ // for(size_t row = 0; row < rows(); ++row) {
+  for(int row = (rows() - 1); row >= 0; --row) {
+  for(int col = 0; col < cols(); ++col) {
+  //for(size_t row = 0; row < rows(); ++row) {
       image << (unsigned char)(occupancy(row,col));
+ //     image << (unsigned char)(occ_matrix(col,row));
     }
   }
+
   image.close();
 
 

@@ -80,13 +80,14 @@ class AslamBase {
 
 public:
 
-  AslamBase(ros::NodeHandle& n,std::string base_name);
+  AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link);
   ros::NodeHandle n_;
   tf::TransformListener tf_listener_;
 
+  bool initialized_ = false;
   costmap_2d::Costmap2DROS costmap2dros_;
 
-  std::string base_name_;
+  std::string base_name_,laser_link_;
   nav_msgs::OccupancyGrid occupancy_grid_;
   mapping::ProbabilityMap probability_map_;
   EnvironmentNAVXYTHETALAT env_;
@@ -109,6 +110,7 @@ public:
   void updateFromOccMap(nav_msgs::OccupancyGrid& occupancy_grid,gtsam::Pose2 current_pose);
   void fromTftoGtsamPose(gtsam::Pose3 &pose3, const tf::Transform &transform);
   void fromGtsamPose2toROS(gtsam::Pose2& pose2,geometry_msgs::Pose& pose);
+  void fromGtsamPose2toTfPose(gtsam::Pose2& pose2,tf::Pose& tf_pose);
 
 
 

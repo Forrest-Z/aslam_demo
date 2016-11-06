@@ -128,8 +128,8 @@ private:
   std::shared_ptr<aslam::AslamBase> aslam_;
 	ros::NodeHandle n_;
 
-
-	std::string base_name_;
+	bool initialized = false;
+	std::string base_name_,laser_link_;
 	laser_geometry::LaserProjection laser_projection_;
 	tf::TransformListener tf_listener_;
 	tf::TransformBroadcaster tf_broadcaster_;
@@ -207,14 +207,14 @@ public:
   void fromGtsamPose2toTf(const gtsam::Pose2 &, tf::Transform &);
 
 
-
+  void spawnAslam(ros::NodeHandle& n);
 	std::mutex slam_mutex;
 	std::condition_variable slam_cv;
 
 
 	std::thread laser_factor_thread_;
 	std::thread slam_thread_;
-	std::thread navigation_thread_;
+	std::shared_ptr<std::thread> navigation_thread_;
 	std::shared_ptr<std::thread> tf_init_thread_;
 
   gtsam::Pose3 base_T_laser_;
