@@ -12,6 +12,7 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/GetMap.h>
+#include <nav_msgs/Path.h>
 
 #include <tf/tf.h>
 #include <tf/transform_broadcaster.h>
@@ -80,7 +81,7 @@ class AslamBase {
 
 public:
 
-  AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link);
+  AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link,ros::Time& time);
   ros::NodeHandle n_;
   tf::TransformListener tf_listener_;
 
@@ -99,11 +100,14 @@ public:
   char* MotPrimFilename_;
   gtsam::Pose2 current_pose_;
   bool planner_init_ = false;
-
+  std::shared_ptr<ros::Time> time_ptr_;
 
   gtsam::Pose3 base_T_laser_;
   ros::Publisher velocity_publisher_;
   ros::Publisher vis_publisher;
+  ros::Publisher plan_publisher;
+  ros::Publisher map_publisher;
+
   visualization_msgs::MarkerArray marker_array_;
   //All interface stuff
   void updateFromProbMap(mapping::ProbabilityMap& probability_map,gtsam::Pose2 current_pose);

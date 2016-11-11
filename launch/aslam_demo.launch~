@@ -2,7 +2,8 @@
 
 <param name ="/use_sim_time" value="true"/>
 <rosparam file="$(find aslam_demo)/config/costmap_params.yaml" command="load" ns="aslam_demo_node/costmap/" />
-<node pkg="map_server" type="map_server" name="map_server" args="/home/sriramana/currmap.yaml" output="screen"/>c
+<rosparam file="$(find aslam_demo)/config/costmap_params.yaml" command="load" ns="aslam_demo_node/local/" />
+<!--node pkg="map_server" type="map_server" name="map_server" args="/home/sriramana/.ros/currmap.yaml" output="screen"/-->
 
 <include file="$(find turtlebot_gazebo)/launch/turtlebot_world.launch">
   <arg name="world_file" value="worlds/willowgarage.world" />

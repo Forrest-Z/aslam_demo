@@ -280,6 +280,8 @@ public:
     update(std::floor(map_coordinates.y()), std::floor(map_coordinates.x()), probability);
   }
 
+
+  void nanRecalc();
 	/**
 	 * Create an Occupancy Grid version of the probability map. An occupancy grid represents the
 	 * probability that a cell is occupied. The function returns the probability in the range [0 255]
@@ -312,6 +314,8 @@ public:
 
     return shannon_entropy_;
   }
+  void calcShannonEntropy();
+
 
 protected:
 
@@ -330,9 +334,9 @@ protected:
    */
   double cell_size_;
 
-  double shannon_entropy_;
+  double shannon_entropy_ = 0.0;
+  double entropy_tol_ = 1.e-06;
 
-  void calcShannonEntropy();
 
 	/**
 	 * Maximum allowable log-odds magnitude to be stored in the map. Larger values

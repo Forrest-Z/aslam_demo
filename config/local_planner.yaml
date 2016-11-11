@@ -1,0 +1,7 @@
+acc_lim_x: 10.0
+acc_lin_y: 10.0
+max_trans_vel: 2.0
+min_trans_vel: 0.4
+yaw_goal_tolerance: 0.05
+xy_goal_tolerance: 0.5
+

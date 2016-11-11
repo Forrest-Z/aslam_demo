@@ -9,6 +9,7 @@ Panels:
         - /MarkerArray1
         - /MarkerArray1/Namespaces1
         - /Path1
+        - /Polygon1
       Splitter Ratio: 0.5
     Tree Height: 811
   - Class: rviz/Selection
@@ -462,7 +463,15 @@ Visualization Manager:
         X: 0
         Y: 0
         Z: 0
-      Topic: ""
+      Topic: /aslam_demo_node/local/local_plan
+      Unreliable: false
+      Value: true
+    - Alpha: 1
+      Class: rviz/Polygon
+      Color: 25; 255; 0
+      Enabled: true
+      Name: Polygon
+      Topic: /aslam_demo_node/costmap/footprint_stamped
       Unreliable: false
       Value: true
   Enabled: true
@@ -484,22 +493,22 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 7.4575
+      Distance: 3.41795
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.06
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.0344972
-        Y: 0.065886
-        Z: 0.148092
+        X: 0.917598
+        Y: 0.0987184
+        Z: 0.147152
       Name: Current View
       Near Clip Distance: 0.01
-      Pitch: 1.0398
+      Pitch: -1.3098
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.16042
+      Yaw: 2.56542
     Saved: ~
 Window Geometry:
   Displays:
@@ -519,5 +528,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1855
-  X: 2069
-  Y: 34
+  X: 167
+  Y: 39

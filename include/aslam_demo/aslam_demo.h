@@ -124,11 +124,11 @@ private:
   void updateKDTree(const gtsam::Values& );
   void searchForLoopClosure(gtsam::NonlinearFactorGraph& ,gtsam::Values& );
   void doScanMatch(sensor_msgs::LaserScan&,sensor_msgs::LaserScan&,mapping::RelativePoseEstimates& );
-  bool tflistflag_ = true;
+  bool tflistflag_ = false;
   std::shared_ptr<aslam::AslamBase> aslam_;
 	ros::NodeHandle n_;
 
-	bool initialized = false;
+	bool initialized = false,map_ready = false,published = false;
 	std::string base_name_,laser_link_;
 	laser_geometry::LaserProjection laser_projection_;
 	tf::TransformListener tf_listener_;
@@ -149,6 +149,9 @@ private:
 	ros::Subscriber odometry_sub_;
 	ros::Subscriber  laser_sub_;
 	ros::Subscriber  gazebo_model_state_sub_;
+
+	ros::Time time_;
+	int skip_loopclosure_ = 20,loops_ = 0;
 
 	ros::ServiceClient model_state_client_;
 	std::map<ros::Time,gazebo_msgs::ModelState> model_state_list_;
@@ -193,7 +196,7 @@ public:
 
 	void scanCallback (const sensor_msgs::LaserScan::ConstPtr&);
 	void odomCallback (const nav_msgs::Odometry::ConstPtr&);
-	void slam();
+	void slam(ros::Time& time);
 	void getMapCallback (nav_msgs::GetMap::Request &req, nav_msgs::GetMap::Response &res);
 	void gazeboModelStateCallback(const gazebo_msgs::ModelStates::ConstPtr&);
 

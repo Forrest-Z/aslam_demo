@@ -14,12 +14,17 @@ const double ProbabilityMap::MAX_LOG_ODDS = 50.0;
 
 /* ************************************************************************* */
 ProbabilityMap::ProbabilityMap(size_t rows, size_t cols, double cell_size, const gtsam::Point2& origin)
-	: data_(gtsam::Matrix::Zero(rows, cols)), origin_(origin), cell_size_(cell_size),shannon_entropy_(0.0) {
+	: data_(gtsam::Matrix::Zero(rows, cols)), origin_(origin), cell_size_(cell_size) {
+  calcShannonEntropy();
+  ROS_INFO_STREAM("Const Entropy"<<shannon_entropy_);
+
 }
 
 ProbabilityMap::ProbabilityMap(nav_msgs::OccupancyGrid& occupancy_grid) {
   setfromOccupancyGrid(occupancy_grid);
   this->calcShannonEntropy();
+  ROS_INFO_STREAM("Occ Entropy"<<shannon_entropy_);
+
 }
 
 /* ************************************************************************* */
@@ -55,13 +60,13 @@ void ProbabilityMap::reset(const ProbabilityMap&  map) {
 
   origin_ = map.origin();
   cell_size_ = map.cell_size_;
-
+  shannon_entropy_ = map.getShannonEntropy();
   data_ = gtsam::Matrix::Zero(map.rows(),map.cols());
   for(size_t row = 0;row < map.rows();row++)
     for(size_t col = 0;col < map.cols();col++) {
       data_(row,col) = ProbabilityToLogOdds(map.at(row,col));
     }
-  this->calcShannonEntropy();
+  ROS_INFO_STREAM("Reset Entropy"<<shannon_entropy_);
 
 
 }
@@ -79,7 +84,13 @@ void ProbabilityMap::setfromOccupancyGrid(nav_msgs::OccupancyGrid& occupancy_gri
 
 void ProbabilityMap::getPublishableMap(const nav_msgs::OccupancyGrid& input,nav_msgs::OccupancyGrid& output) {
   output = input;
+  output.header.frame_id = "map";
   for(size_t i = 0;i < input.info.height*input.info.width;i++) {
+    if(input.data[i] <= 128 && input.data[i] >= 126) {
+      output.data[i] = -1;
+      continue;
+    }
+
     output.data[i] = ((double)input.data[i]/255.0)*100;
   }
 }
@@ -399,9 +410,14 @@ void ProbabilityMap::calcShannonEntropy() {
   double entropy = 0.0;
   for(size_t row = 0;row < rows();row++)
     for(size_t col = 0;col < cols(); col++) {
-      double probability = this->at(row,col);
-      entropy += probability*log(probability) + (1 - probability)*log(1 - probability);
+      double probability = this->at(row,col) + entropy_tol_;
+      if (std::isnan(probability)) continue;
+      double value = probability*log(probability) + (1 - probability)*log(1 - probability);
+      if(std::isnan(value)) continue;
+      entropy += value;
+
     }
+
   shannon_entropy_ = -entropy;
 }
 
@@ -413,14 +429,24 @@ void ProbabilityMap::update(int row, int col, double probability) {
       + boost::lexical_cast<std::string>(row) + "," + boost::lexical_cast<std::string>(col)
       + ") is not within the map bounds.");
 
-  double old_probability = this->at(row,col);
-  shannon_entropy_ += old_probability*log(old_probability) + (1 - old_probability)*log(1 - old_probability);
-  shannon_entropy_ -= probability*log(probability) + (1 - probability)*log(1 - probability);
+  double old_probability = this->at(row,col) + entropy_tol_;
+  double old_val = old_probability*log(old_probability) + (1 - old_probability)*log(1 - old_probability);
+  double new_probability = probability + entropy_tol_;
+  double new_val = new_probability*log(new_probability) + (1 - new_probability)*log(1 - new_probability);
+  if(!(std::isnan(old_val) || std::isnan(new_val))) {
+    shannon_entropy_ += old_val - new_val;
+  }
 
   // Increment the log-odds entry by the provided probability value
   data_(row,col) += ProbabilityToLogOdds(probability);
   if(data_(row,col) > +MAX_LOG_ODDS) data_(row,col) = +MAX_LOG_ODDS;
   if(data_(row,col) < -MAX_LOG_ODDS) data_(row,col) = -MAX_LOG_ODDS;
+}
+
+void ProbabilityMap::nanRecalc() {
+  if(std::isnan(shannon_entropy_)) {
+    calcShannonEntropy();
+  }
 }
 
 /* ************************************************************************* */

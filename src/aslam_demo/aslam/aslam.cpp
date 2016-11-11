@@ -2,25 +2,32 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/core.hpp>
 
+
 namespace aslam {
-AslamBase::AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link):
+AslamBase::AslamBase(ros::NodeHandle& n,std::string base_name,std::string laser_link,ros::Time& time):
 n_(n),
 probability_map_(1,1,1,gtsam::Point2(0.0,0.0)),
 occupancy_grid_(),
 costmap2dros_("costmap",tf_listener_),
 tf_listener_(ros::Duration(1000000)),
+
 //local_planner_(std::make_shared<dwa_local_planner::DWAPlannerROS>()),
 current_pose_(gtsam::Pose2(100.0,100.0,0.0)),
 alpha_(1.0),
 MotPrimFilename_("/home/sriramana/sbpl/matlab/mprim/pr2.mprim"),
 base_name_(base_name),
-laser_link_(laser_link) {
+laser_link_(laser_link),
+time_ptr_(&time) {
 
-  ROS_INFO_STREAM("A");
+  ROS_INFO_STREAM("AslamBase Object"<<base_name_<<"\t"<<laser_link_);
+
  // local_planner_->initialize("local",&tf_listener_,&costmap2dros_);
   local_planner_.initialize("local",&tf_listener_,&costmap2dros_);
-  velocity_publisher_  = n_.advertise<geometry_msgs::Twist>("cmd_vel",1);
+  velocity_publisher_  = n_.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity",1);
   vis_publisher = n_.advertise<visualization_msgs::MarkerArray>( "visualization_marker", 0 );
+  plan_publisher = n_.advertise<nav_msgs::Path>( "global_path", 0 );
+  map_publisher = n_.advertise<nav_msgs::OccupancyGrid>( "dmap", 0 );
+
   tf::StampedTransform ts;
   tf::Transform tr;
   try {
@@ -89,7 +96,7 @@ void AslamBase::updateFromProbMap(mapping::ProbabilityMap& probability_map,gtsam
 
 
 void AslamBase::MarkerConfig(visualization_msgs::Marker& marker,gtsam::Pose2& pose,int& id) {
-  marker.header.frame_id = base_name_;
+  marker.header.frame_id = "map";
   marker.header.stamp = ros::Time::now();
   marker.ns = "aslam";
   marker.id = id;
@@ -102,13 +109,20 @@ void AslamBase::MarkerConfig(visualization_msgs::Marker& marker,gtsam::Pose2& po
   q.setEuler(pose.theta(),0.0,0.0);
   tf::quaternionTFToMsg(q,marker.pose.orientation);
 
-  marker.scale.x = 0.01;
-  marker.scale.y = 0.01;
+  marker.scale.x = 0.1;
+  marker.scale.y = 0.1;
   marker.scale.z = 0.01;
   marker.color.a = 1.0; // Don't forget to set the alpha!
   marker.color.r = 0.0;
   marker.color.g = 1.0;
   marker.color.b = 0.0;
+}
+
+void resetMarkerArray(visualization_msgs::MarkerArray& marker_array) {
+  for(auto &iter: marker_array.markers) {
+    iter.header.stamp = ros::Time::now();
+    iter.header.frame_id = "map";
+  }
 }
 
 
@@ -122,41 +136,52 @@ void AslamBase::addToMarkerArray(visualization_msgs::MarkerArray& marker_array,g
 
 void AslamBase::driveRobot(rosTrajectory& trajectory) {
   //@todo: figure out where this comes from
-//  setSPBLEnvfromOccupancyGrid(env_,occupancy_grid_,MotPrimFilename_);
-//  planxythetalat(env_,start,goal,spbl_global_path_);
-//  fromSPBLtoROSpath(spbl_global_path_,ros_global_path_);
-  ROS_INFO_STREAM("Is Init"<<local_planner_.isInitialized());
+
   while(!local_planner_.isInitialized())  {
-    ROS_INFO_STREAM("Entered");
     local_planner_.initialize("local",&tf_listener_,&costmap2dros_);
-    ROS_INFO_STREAM("Exited");
   }
+  nav_msgs::Path path;
+  path.header.frame_id = base_name_;
+  path.header.stamp = ros::Time::now();
+  for(auto const iter: trajectory) {
+    path.poses.push_back(iter);
+  }
+  plan_publisher.publish(path);
   bool plan_set = local_planner_.setPlan(trajectory);
   while(!plan_set);
-  geometry_msgs::Twist cmd_vel;
   while(!local_planner_.isGoalReached()) {
-    auto a = costmap2dros_.getRobotFootprint();
-    ROS_INFO_STREAM("SS"<<a[1]);
+    geometry_msgs::Twist cmd_vel;
 
-    ROS_INFO_STREAM("SS"<<a.size()<<costmap2dros_.getCostmap()->getCharMap()[1000]);
-    tf::Pose tf_pose;
-    geometry_msgs::Pose pose_geo;
-    fromGtsamPose2toTfPose(current_pose_,tf_pose);
-    costmap_2d::Costmap2D *costmap = costmap2dros_.getLayeredCostmap()->getCostmap();
-
-  //  tf::Stamped<tf::Pose> pose(tf_pose,ros::Time::now() - ros::Duration(5.0),base_name_);
+    auto goall = *trajectory.rbegin();
+    try {
+             tf_listener_.waitForTransform(base_name_,"map",
+                                          ros::Time::now(),ros::Duration(100));
+    }
+         catch (tf::TransformException &ex) {
+             ROS_ERROR("%s",ex.what());
+             ros::Duration(1.0).sleep();
+    }
     tf::Stamped<tf::Pose> pose;
     costmap2dros_.getRobotPose(pose);
-    ROS_INFO_STREAM("SS\t("<<pose.getOrigin().x()<<","<<pose.getOrigin().y()<<")\t"<<trajectory[0].header.stamp);
-
-    while(1) {
-      bool success = local_planner_.computeVelocityCommands(cmd_vel);
-    }
+    tf::StampedTransform ts;
+    ros::Time curr_time = ros::Time::now();
 
 
+    gtsam::Pose2 goal(16,15.0,0);
+    gtsam::Pose2 goal_pose = probability_map_.fromSBPL(goal);
+    ROS_INFO_STREAM("Pose"<< pose.getOrigin().x() <<"\t"<< pose.getOrigin().y()<<"\t"<<pose.getRotation()<<"\t"<<goall.pose.position.x<<"\t"<<goall.pose.position.y<<"\t"<<goall.pose.orientation);
+    bool success = local_planner_.computeVelocityCommands(cmd_vel);
+    ROS_INFO_STREAM("Pose"<< local_planner_.isGoalReached());
+
+    int buffer = 100000;
   //  bool success = local_planner_.dwaComputeVelocityCommands(pose,cmd_vel);
-   // if (success) velocity_publisher_.publish(cmd_vel);
-
+  //  while(--buffer) {
+      if (success) velocity_publisher_.publish(cmd_vel);
+  //  }
+     // ros::Duration(10.0).sleep();
+    while(((curr_time - *time_ptr_) > ros::Duration(0.1)));
+    resetMarkerArray(marker_array_);
+    vis_publisher.publish(marker_array_);
 
   }
 }
@@ -186,7 +211,7 @@ void AslamBase::mainAslamAlgorithm() {
   for(auto const iter:frontier_indices) {
     gtsam::Point2 world_point = probability_map_.toWorld(gtsam::Point2(iter.first,iter.second));
     gtsam::Pose2 pose(world_point.x(),world_point.y(),0.0);
-    addToMarkerArray(marker_array_,pose);
+   // addToMarkerArray(marker_array_,pose);
   }
   ROS_INFO_STREAM("Marker Array"<<marker_array_.markers.size());
  //c vis_publisher.publish(marker_array_);
@@ -201,10 +226,10 @@ void AslamBase::mainAslamAlgorithm() {
     ROS_INFO_STREAM("Cluster Centers");
     spblTrajectory trajectory;
     gtsam::Point2 world_point = probability_map_.toWorld(gtsam::Point2(iter.first,iter.second));
-
-    //gtsam::Pose2 goal(world_point.x() - probability_map_.origin().x(),world_point.y() - probability_map_.origin().y(),0.0); //@todo get good estimate of orientation
-    gtsam::Pose2 goal(15.5,15.0,0); //@todo Inflate obstacles and remove invalid configuration
-    ROS_INFO_STREAM("Coordinates"<<iter.first<<"\t"<<iter.second<<"\t"<<current_pose_.x()<<"\t"<<current_pose_.y());
+    gtsam::Pose2 pose(world_point.x(),world_point.y(),0.0);
+    gtsam::Pose2 goal(world_point.x() - probability_map_.origin().x(),world_point.y() - probability_map_.origin().y(),0.0); //@todo get good estimate of orientation
+    addToMarkerArray(marker_array_,pose);
+  //  gtsam::Pose2 goal(16,15.0,0); //@todo Inflate obstacles and remove invalid configuration
     std::vector<int> solution_stateIDs;
     planxythetalat(env,current_pose_,goal,trajectory,solution_stateIDs,planner_init_);
     plotsbplTrajectory(trajectory);
@@ -272,15 +297,17 @@ void AslamBase::predictedMeasurement(mapping::ProbabilityMap& probability_map,sp
         }
     //   ROS_INFO_STREAM("ER\t" << expected_range);
       }
-      if (expected_range == 0.0) expected_range += 1.000001;
+      if (expected_range == 0.0) expected_range += 0.000001;
       laser_scan.ranges.push_back(expected_range);
     }
     predicted_scans.push_back(laser_scan);
+
   }
 }
 
 void AslamBase::getProbabilityMaps(const mapping::ProbabilityMap& probability_map,spblTrajectory& trajectory,LaserScanList& measurements,ProbabilityMaps& probability_maps) {
   mapping::ProbabilityMap current_map(probability_map);
+  current_map.calcShannonEntropy();
   mapping::sensor_models::LaserScanModel laser_scan_model(0.05,true);
   //gtsam::Pose3 base_T_laser = gtsam::Pose3::identity(); //@todo get this from somewhere
   if (trajectory.size() != measurements.size()) ROS_ERROR("Size not Equal");
@@ -289,11 +316,14 @@ void AslamBase::getProbabilityMaps(const mapping::ProbabilityMap& probability_ma
     gtsam::Pose2 world_T_base = probability_map.fromSBPL(sbpl_pose);
     auto measurement  = measurements[i];
    // gtsam::Pose2 world_T_base(pose.x,pose.y,pose.theta);
-  //  world_T_base.print("World to base");
-  //  ROS_INFO_STREAM("Measurement"<<measurement);
+  //   ROS_INFO_STREAM("Measurement"<<measurement);
     laser_scan_model.updateMap(current_map,measurement,world_T_base,base_T_laser_);
     probability_maps.push_back(current_map);
-  //  ROS_INFO_STREAM("CR"<<current_map);
+    nav_msgs::OccupancyGrid curr_map,curr_map_pub;
+    current_map.occupancyGrid(curr_map);
+    current_map.getPublishableMap(curr_map,curr_map_pub);
+    map_publisher.publish(curr_map_pub);
+    ROS_INFO_STREAM("CR"<<current_map.getShannonEntropy());
   }
 }
 
@@ -368,8 +398,8 @@ void AslamBase::setCostMapfromOccGrid(nav_msgs::OccupancyGrid& occupancy_grid,co
 
 void AslamBase::createFootprint(std::vector<sbpl_2Dpt_t>& perimeter) {
     sbpl_2Dpt_t pt_m;
-    double halfwidth = 0.001;
-    double halflength = 0.001;
+    double halfwidth = 0.1;
+    double halflength = 0.1;
     pt_m.x = -halflength;
     pt_m.y = -halfwidth;
     perimeter.push_back(pt_m);
@@ -489,13 +519,13 @@ void AslamBase::planxythetalat(EnvironmentNAVXYTHETALAT& env,gtsam::Pose2& start
 
 
 void AslamBase::fromSPBLtoROSpath(std::vector<sbpl_xy_theta_pt_t> &xythetaPath, std::vector< geometry_msgs::PoseStamped > &plan) {
-  int offset = 1;
+  double offset = 0.0;
   for(auto const &iter: xythetaPath) {
     gtsam::Pose2 pose = probability_map_.fromSBPL(iter);
 
     geometry_msgs::PoseStamped pose_stamped;
-    pose_stamped.header.stamp = ros::Time::now() + ros::Duration(offset*10);
-    pose_stamped.header.frame_id = "base_footprint";
+    pose_stamped.header.stamp = ros::Time::now() + ros::Duration(offset);
+    pose_stamped.header.frame_id = "map";
     pose_stamped.pose.position.x = pose.x();
     pose_stamped.pose.position.y = pose.y();
     pose_stamped.pose.position.z = 0.0;
@@ -505,7 +535,7 @@ void AslamBase::fromSPBLtoROSpath(std::vector<sbpl_xy_theta_pt_t> &xythetaPath, 
     tf::quaternionTFToMsg(q,pose_stamped.pose.orientation);
     ROS_INFO_STREAM("Pse Stamped"<<pose_stamped);
     plan.push_back(pose_stamped);
-    offset++;
+    offset += 1.01;
   }
 }
 

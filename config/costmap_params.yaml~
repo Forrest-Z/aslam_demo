@@ -1,12 +1,14 @@
 global_frame: map
 robot_base_frame: base_footprint
-publish_frequency: 5.0
-transform_tolerance: 100
-footprint: [[-0.0325, -0.0325], [-0.0325, 0.0325], [0.0325, 0.0325], [0.046, 0.0], [0.0325, -0.0325]]
-update_frequency: 5.0
+publish_frequency: 1.0
+transform_tolerance: 1000.0
+footprint: [[-0.1, -0.1], [-0.1, 0.1], [0.1, 0.1],[0.1, -0.01]]
+update_frequency: 1.0
 odom_topic: odom
 rolling_window: false
 static_map: true
+track_unknown_space: false
+unknown_cost_value: -1
 plugins: 
     - {name: static_map,       type: "costmap_2d::StaticLayer"}
 
@@ -14,4 +16,7 @@ static_map:
     unknown_cost_value: -1
     lethal_cost_threshold: 100
     map_topic: "map"  
-    track_unknown_space: false	
+    track_unknown_space: true
+    use_maximum: true
+    update_frequency: 1.0
+    publish_frequency: 1.0

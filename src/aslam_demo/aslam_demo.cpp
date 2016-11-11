@@ -6,11 +6,11 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
     isactive_slam_thread_(true),
     current_pose_(gtsam::Pose2(0.0,0.0,0.0)),
     base_name_("base_footprint"),
-    laser_link_("camera_depth_frame") {
-  ROS_INFO_STREAM("A");
+    laser_link_("camera_depth_frame"),
+aslam_(nullptr) {
+  ROS_INFO_STREAM("AslamDemo Object");
 
-  ROS_INFO_STREAM("Transform Sent");
-  map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("curr_map",1);
+  map_pub_ = n_.advertise<nav_msgs::OccupancyGrid>("map",1);
   pose_pub_ = n_.advertise<geometry_msgs::Pose2D>("curr_pose",1);
   command_pub_ = n_.advertise<geometry_msgs::Twist>("command",1);
   tf_init_thread_ = std::make_shared<std::thread>(boost::bind(&AslamDemo::tfInit,this));
@@ -21,7 +21,6 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
 	gazebo_model_state_sub_ = n_.subscribe<gazebo_msgs::ModelStates>("/gazebo/model_states",1000,boost::bind(&AslamDemo::gazeboModelStateCallback,this,_1));
 ///	f = std::bind(&AslamDemo::tac, this, _1, _2);
  	pose_tree_ = tree_type(std::ptr_fun(tac));
-	ROS_INFO_STREAM("A");
 	tf::StampedTransform stamped_transform;
 	tf::Transform transform;
 	try {
@@ -34,14 +33,12 @@ AslamDemo::AslamDemo(ros::NodeHandle& n):n_(n),time_tolerance(0.0001),key_genera
 	  ROS_ERROR("%s",ex.what());
 	  ros::Duration(1.0).sleep();
   }
-	ROS_INFO_STREAM("B");
 
 	current_pose_ = gtsam::Pose2(0.0,0.0,0.0);
 	transform.setIdentity();
 
   map_service_client_ = n_.serviceClient<nav_msgs::GetMap>("static_map");
   model_state_client_ = n_.serviceClient<gazebo_msgs::GetModelState>("gazebo/get_model_state");
-	ROS_INFO_STREAM("D");
 
    // slam_thread_ = std::thread(&AslamDemo::slamHandler,this);
 }
@@ -59,15 +56,24 @@ void AslamDemo::tfInit() {
     tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(), base_name_,"/map" ));
   //  ROS_INFO_STREAM("Cell"<<current_map_publishable_.info.resolution);
     map_pub_.publish(current_map_publishable_);
-
+    published = true;
+    ros::Duration(4.0).sleep();
    // tf_broadcaster_.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(), ros::Time::now()+ros::Duration(5.0), "/base_link","/map" ));
 
    }
 
 }
 void AslamDemo::spawnAslam(ros::NodeHandle& n) {
-  aslam_ = std::make_shared<aslam::AslamBase>(n,base_name_,laser_link_);
+  while(1) {
+  while(!published);
+  ROS_INFO_STREAM("Pub"<<published);
+  if(!initialized) {
+  aslam_ = std::make_shared<aslam::AslamBase>(n,base_name_,laser_link_,time_);
   initialized = true;
+  }
+  while(!map_ready);
+  doAslamStuff(prob_map_);
+  }
 }
 
 
@@ -103,7 +109,7 @@ void AslamDemo::doScanMatch(sensor_msgs::LaserScan& latest_scan,sensor_msgs::Las
         current_scan,
     csm_params,
     initial_pose,base_T_laser_,.1,100000000000000,1000000000000000,"../");
-    laser_pose.relative_pose.print("Laser Scan Match:");
+    //laser_pose.relative_pose.print("Laser Scan Match:");
      // laser_poses_.push_back(laser_pose);
     relative_poses.push_back(laser_pose);
   }
@@ -123,8 +129,10 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 	sensor_msgs::LaserScan current_scan = *scan_ptr;
 	doScanMatch(latest_scan,current_scan,laser_pose_cache_);
 
-    if (laser_pose_cache_.size()%10 == 0) {
-    	slam();
+    if (laser_pose_cache_.size()%40 == 0) {
+      time_ = latest_scan.header.stamp;
+      ros::Time curr_time = ros::Time::now();
+    	slam(curr_time);
     }
 	laserscans_[scan_ptr->header.stamp] = *scan_ptr;
 }
@@ -137,7 +145,7 @@ void AslamDemo::slamHandler() {
 		if (!isactive_slam_thread_) {
 			return;
 		}
-		slam();
+		slam(time_);
 	}
 }
 
@@ -175,7 +183,6 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 	ros::Duration delta_time;
 	for(auto const iter:keys) {
 	  ros::Time timestamp = key_generator_.extractTimestamp(iter);
-	  if(key_generator_.generateKey(factors::key_type::Pose2,timestamp) == iter) ROS_INFO_STREAM("I'm not insane");
 	  extracted_timestamps.insert(timestamp);
 	}
 	sigmas<<0.1,0.1,0.1,0.1,0.1,0.1;
@@ -191,7 +198,6 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 	    if(delta_time.toSec() > time_threshold) {
 	      while(new_time < curr_time) {
 
-	        ROS_INFO_STREAM("New Time"<<new_time<<"Delta_time"<<delta_time.toSec());
           new_time += ros::Duration(1.0);
           gtsam::Key new_key = key_generator_.generateKey(factors::key_type::Pose2,new_time);
           keys.insert(new_key);
@@ -206,15 +212,12 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 //		initial_guess_.insert(iter,gtsam::Pose2(0.0,0.0,0.0));
 	}
 	if(!timestamps.size()) return;
-  for(auto const iter: timestamps) ROS_INFO_STREAM("Timestamp"<<iter);
 
 	mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,time_tolerance);
-  for(auto const iter: relative_estimates) iter.relative_pose.print("Rel P");
 
 	gtsam::NonlinearFactorGraph odom_graph = mapping::odometry::createOdometryFactors(relative_estimates,time_tolerance,keys);
 
 	gtsam::Pose2 curr_pose = current_pose_;
-	odom_graph.print("Odom Graph");
 	auto ptr = keys.begin();
 	initial_guess.insert(*ptr,curr_pose);
 
@@ -249,7 +252,6 @@ void AslamDemo::updateKDTree(const gtsam::Values& values) {
 }
 
 void AslamDemo::searchForLoopClosure(gtsam::NonlinearFactorGraph& factor_graph,gtsam::Values& values) {
-  ROS_INFO_STREAM("Search for loop closure"<<factor_graph.size()<<"\t"<<values.size());
   if(factor_graph.size()) return;
 
   for(auto const iter: values) {
@@ -282,9 +284,7 @@ void AslamDemo::searchForLoopClosure(gtsam::NonlinearFactorGraph& factor_graph,g
     if(iter1 != laserscans_.end() && iter2 != laserscans_.end()) {
 
       mapping::RelativePoseEstimates relative_poses;
-      ROS_INFO_STREAM("Loop Closure Matching");
       doScanMatch(iter1->second,iter2->second,relative_poses);
-      ROS_INFO_STREAM("Loop Closure Matching Done");
 
       if(relative_poses.size() != 0) {
         const gtsam::Pose2 relative_pose = relative_poses.begin()->relative_pose;
@@ -348,7 +348,7 @@ void AslamDemo::FromQuaternionToRPY(tf::Quaternion& q,double& roll,double& pitch
      m.getRPY(roll, pitch, yaw);
 }
 
-void AslamDemo::slam() {
+void AslamDemo::slam(ros::Time& time) {
 	if (laser_pose_cache_.empty() ) {
 		return;
 	}
@@ -363,8 +363,7 @@ void AslamDemo::slam() {
 		ROS_INFO_STREAM("Not Validated!!");
 		return;
 	}
-	factor_graph.print();
-	initial_guess.print();
+
 //	pose_estimates_ = mapping::optimization::optimizeFactorGraph(factor_graph_,initial_guess_,parameters_);
 	pose_estimates = mapping::optimization::optimizeFactorGraph(factor_graph,initial_guess,parameters_);
 //	gtsam::Values true_estimates;
@@ -372,13 +371,13 @@ void AslamDemo::slam() {
 //	pose_estimates = true_estimates;
 	current_pose_ = extractLatestPose(pose_estimates);
 	current_pose_.print("Current Pose: ");
-	searchForLoopClosure(factor_graph_,pose_estimates);
+	if(loops_ % skip_loopclosure_ ) searchForLoopClosure(factor_graph_,pose_estimates);
 	updateKDTree(pose_estimates);
 	if (!pose_estimates.size()) {
 		return;
 	}
 	//pose_with_cov_ = mapping::optimization::computeCovariances(factor_graph_,pose_estimates_);
-
+	loops_ ++;
 
 //	pose_estimates_.print("Pose Estimates");
 //	prob_map_.clear();
@@ -399,17 +398,18 @@ void AslamDemo::slam() {
  // mapping::map::writeMap(filename,current_map_publishable_,0.2,0.8);
 	prob_map_.occupancyGrid(filename);
 	tflistflag_ = true;
+	map_ready = true;
 	//prob_map_.print("Prob Map");
 	tf::Transform transform;
 	fromGtsamPose2toTf(current_pose_,transform);
-	tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), ros::Time::now(),base_name_,"map" ));
+	tf_broadcaster_.sendTransform(tf::StampedTransform(transform.inverse(), time,base_name_,"map" ));
  // tf_broadcaster_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base_link","map" ));
 
 
 	ROS_INFO_STREAM("Map Formed"<<prob_map_.origin());
 //	current_map_  = fromGtsamMatrixToROS(occupancy_map);
 	map_pub_.publish(current_map_publishable_);
-	doAslamStuff(prob_map_);
+	//doAslamStuff(prob_map_);
 //	pose_estimates_.insert(pose_estimates);
 	factor_graph_.push_back(factor_graph);
 	laser_poses_.insert(laser_poses_.end(),laser_pose_cache_.begin(),laser_pose_cache_.end());
