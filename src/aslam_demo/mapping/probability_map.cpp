@@ -86,12 +86,15 @@ void ProbabilityMap::getPublishableMap(const nav_msgs::OccupancyGrid& input,nav_
   output = input;
   output.header.frame_id = "map";
   for(size_t i = 0;i < input.info.height*input.info.width;i++) {
-    if(input.data[i] <= 128 && input.data[i] >= 126) {
+    if(input.data[i] == 127) {
       output.data[i] = -1;
       continue;
     }
-
-    output.data[i] = ((double)input.data[i]/255.0)*100;
+    double value = ((double)input.data[i]/255.0)*100;
+    int out_value;
+    if (input.data[i] > 30.0)  out_value = 100;
+    else out_value = (int) value;
+    output.data[i] = out_value;
   }
 }
 /* ************************************************************************* */

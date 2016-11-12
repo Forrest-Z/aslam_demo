@@ -141,6 +141,7 @@ private:
   mapping::ProbabilityMap prob_map_;
   gtsam::Pose2 current_pose_;
 
+  int missing_scan_counter_ = 0;
 
 	ros::Publisher map_pub_;
 	ros::Publisher pose_pub_;

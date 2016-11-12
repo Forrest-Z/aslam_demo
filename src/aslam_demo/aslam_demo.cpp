@@ -130,10 +130,15 @@ void AslamDemo::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_ptr) {
 	doScanMatch(latest_scan,current_scan,laser_pose_cache_);
 
     if (laser_pose_cache_.size()%40 == 0) {
+      missing_scan_counter_ = 0;
       time_ = latest_scan.header.stamp;
       ros::Time curr_time = ros::Time::now();
     	slam(curr_time);
     }
+    else if(missing_scan_counter_ > 50){
+      time_ = latest_scan.header.stamp;
+    }
+  missing_scan_counter_ ++;
 	laserscans_[scan_ptr->header.stamp] = *scan_ptr;
 }
 
@@ -387,7 +392,7 @@ void AslamDemo::slam(ros::Time& time) {
 	}
   std::string filename = "currmap";
 
-	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.1,time_tolerance,filename);
+	mapping::map::buildMap(prob_map_,pose_estimates,laserscans_,base_T_laser_,.01,time_tolerance,filename);
 
 	ROS_INFO_STREAM("Map Initialized");
 	ROS_INFO_STREAM("Map Formed!!");

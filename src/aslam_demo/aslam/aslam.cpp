@@ -134,6 +134,7 @@ void AslamBase::addToMarkerArray(visualization_msgs::MarkerArray& marker_array,g
 }
 
 
+
 void AslamBase::driveRobot(rosTrajectory& trajectory) {
   //@todo: figure out where this comes from
 
@@ -148,9 +149,13 @@ void AslamBase::driveRobot(rosTrajectory& trajectory) {
   }
   plan_publisher.publish(path);
   bool plan_set = local_planner_.setPlan(trajectory);
-  while(!plan_set);
-  while(!local_planner_.isGoalReached()) {
+  int stuck_count = 0;
+  double thresh = 0.1;
+  gtsam::Point2 point1(0.0,0.0),point2(0.0,0.0);
+  while(!local_planner_.isGoalReached() && plan_set) {
     geometry_msgs::Twist cmd_vel;
+    bool plan_set = local_planner_.setPlan(trajectory);
+
 
     auto goall = *trajectory.rbegin();
     try {
@@ -165,18 +170,29 @@ void AslamBase::driveRobot(rosTrajectory& trajectory) {
     costmap2dros_.getRobotPose(pose);
     tf::StampedTransform ts;
     ros::Time curr_time = ros::Time::now();
+    point1 = gtsam::Point2(pose.getOrigin().x(),pose.getOrigin().y());
+    if(point2.dist(point1) < thresh) stuck_count++;
 
-
-    gtsam::Pose2 goal(16,15.0,0);
-    gtsam::Pose2 goal_pose = probability_map_.fromSBPL(goal);
     ROS_INFO_STREAM("Pose"<< pose.getOrigin().x() <<"\t"<< pose.getOrigin().y()<<"\t"<<pose.getRotation()<<"\t"<<goall.pose.position.x<<"\t"<<goall.pose.position.y<<"\t"<<goall.pose.orientation);
     bool success = local_planner_.computeVelocityCommands(cmd_vel);
     ROS_INFO_STREAM("Pose"<< local_planner_.isGoalReached());
 
-    int buffer = 100000;
   //  bool success = local_planner_.dwaComputeVelocityCommands(pose,cmd_vel);
   //  while(--buffer) {
       if (success) velocity_publisher_.publish(cmd_vel);
+      point2 = point1;
+      if(stuck_count > 10) {
+        int buffer = 10000;
+        while(--buffer) {
+          float rndm = rand()/(float)RAND_MAX;
+          cmd_vel.linear.x = -rndm;
+          cmd_vel.linear.y = -rndm;
+          cmd_vel.angular.z = 0.0;
+
+          velocity_publisher_.publish(cmd_vel);
+          stuck_count = 0;
+        }
+      }
   //  }
      // ros::Duration(10.0).sleep();
     while(((curr_time - *time_ptr_) > ros::Duration(0.1)));

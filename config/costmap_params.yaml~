@@ -2,7 +2,7 @@ global_frame: map
 robot_base_frame: base_footprint
 publish_frequency: 1.0
 transform_tolerance: 1000.0
-footprint: [[-0.1, -0.1], [-0.1, 0.1], [0.1, 0.1],[0.1, -0.01]]
+footprint: [[-0.05, -0.05], [-0.05, 0.05], [0.05, 0.05],[0.05, -0.05]]
 update_frequency: 1.0
 odom_topic: odom
 rolling_window: false
