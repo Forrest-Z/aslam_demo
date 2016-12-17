@@ -190,7 +190,7 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 	  ros::Time timestamp = key_generator_.extractTimestamp(iter);
 	  extracted_timestamps.insert(timestamp);
 	}
-	sigmas<<0.1,0.1,0.1,0.1,0.1,0.1;
+	sigmas<<0.001,0.001,0.001,0.001,0.001,0.001;
 	bool is_first = true;
 	for (auto const curr_time: extracted_timestamps) {
 //		ROS_INFO_STREAM("Keys:"<<iter);
@@ -218,7 +218,8 @@ void AslamDemo::connectWithOdometry(gtsam::NonlinearFactorGraph& factor_graph,gt
 	}
 	if(!timestamps.size()) return;
 
-	mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,time_tolerance);
+	//mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(odomreadings_,timestamps,sigmas,time_tolerance);
+  mapping::RelativePoseEstimates relative_estimates = mapping::odometry::computeRelativePoses(trueodomreadings_,timestamps,sigmas,time_tolerance);
 
 	gtsam::NonlinearFactorGraph odom_graph = mapping::odometry::createOdometryFactors(relative_estimates,time_tolerance,keys);
 

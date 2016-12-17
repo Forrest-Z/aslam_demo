@@ -227,7 +227,7 @@ void AslamBase::mainAslamAlgorithm() {
   for(auto const iter:frontier_indices) {
     gtsam::Point2 world_point = probability_map_.toWorld(gtsam::Point2(iter.first,iter.second));
     gtsam::Pose2 pose(world_point.x(),world_point.y(),0.0);
-   // addToMarkerArray(marker_array_,pose);
+    addToMarkerArray(marker_array_,pose);
   }
   ROS_INFO_STREAM("Marker Array"<<marker_array_.markers.size());
  //c vis_publisher.publish(marker_array_);
@@ -251,6 +251,8 @@ void AslamBase::mainAslamAlgorithm() {
     plotsbplTrajectory(trajectory);
     trajectory_list.push_back(trajectory);
   }
+  vis_publisher.publish(marker_array_);
+
   ROS_INFO_STREAM("Traj Length"<<trajectory_list.size());
   spblTrajectory best_trajectory;
   selectTrajectory(probability_map_,trajectory_list,best_trajectory);
